@@ -306,7 +306,7 @@ The agent also refuses to apply for jobs, email recruiters, log in, bypass acces
 
 ## 13. Real-posting hand checks
 
-These hand checks use the Stripe Greenhouse API response fetched on October 29, 2026 at 22:41:31 UTC, committed as `evidence/handcheck/stripe-jobs-2026-10-29T22-41-31Z.json`. Its SHA-256 (`74e20e05ef226186…`, full value in the accompanying `.meta.json`) and HTTP status are recorded in `evidence/handcheck/stripe-jobs-2026-10-29T22-41-31Z.meta.json`. Posting URLs are the raw `absolute_url` values. These are evaluations of the contract's rule, not claims that the jobs are a good personal fit. How each part was checked is stated in §19.
+These hand checks use the Stripe Greenhouse API response fetched on October 29, 2026 at 22:41:31 UTC, committed as `evidence/handcheck/stripe-jobs-2026-10-29T22-41-31Z.json`. Its SHA-256 (`74e20e05ef226186…`, full value in the accompanying `.meta.json`) and HTTP status are recorded in `evidence/handcheck/stripe-jobs-2026-10-29T22-41-31Z.meta.json`. Posting URLs are the raw `absolute_url` values. These are evaluations of the contract's rule, not claims that the jobs are a good personal fit.
 
 ### Case 1 — US-based positive example: MATCH
 
