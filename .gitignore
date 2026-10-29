@@ -1,0 +1,25 @@
+# Real résumé and anything personal stays on this machine. Never un-ignore these.
+private/
+resume.json
+*.resume.json
+!*.resume.example.json
+.env
+.env.*
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
