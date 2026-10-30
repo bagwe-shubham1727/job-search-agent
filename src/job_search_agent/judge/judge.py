@@ -3,7 +3,9 @@
 * The call is made only when ``backend.availability()`` says so; otherwise the
   judgment is ``UNAVAILABLE`` and nothing is called or logged.
 * A failed call (spawn, timeout, non-zero exit, bad envelope, ``is_error``) is
-  ``ERROR`` and is **not** retried; the pipeline keeps the posting pending.
+  ``ERROR`` and is **not** retried; the pipeline keeps the posting pending. A failure
+  before any process started (``PRE_SPAWN_ERRORS``: executable gone, working
+  directory not creatable) is ``UNAVAILABLE`` instead (CONTRACT §8), also pending.
 * A reply that fails validation is retried **once** (when ``retry_once``) with the
   byte-identical prompt in a new process. Two invalid replies give
   ``INVALID_OUTPUT``. Experiments pass ``retry_once=False`` and score the first reply.
@@ -52,6 +54,7 @@ from job_search_agent.judge.validator import (
     validate_reply,
 )
 from job_search_agent.models import (
+    PRE_SPAWN_ERRORS,
     AttemptSummary,
     BackendErrorKind,
     BackendReply,
@@ -62,7 +65,7 @@ from job_search_agent.models import (
     Posting,
     VerifiedResume,
 )
-from job_search_agent.ports import Clock, CommandRunner, ModelBackend
+from job_search_agent.ports import Clock, CommandRunner, EventSink, ModelBackend
 from job_search_agent.privacy import sensitive_values
 from job_search_agent.resume import PERSONA_LABEL
 
@@ -253,6 +256,7 @@ def judge_posting_detailed(
         model_requested=model_requested,
         attempts=[_summary(a) for a in attempts],
     )
+    last_error = attempts[-1].reply.error if attempts else None
     if isinstance(final, ValidJudgment):
         reply_model = final.reply
         judgment = ModelJudgment(
@@ -266,6 +270,13 @@ def judge_posting_detailed(
     elif isinstance(final, Rejection):
         judgment = ModelJudgment(
             status=JudgmentStatus.INVALID_OUTPUT, diagnostic=diagnostic
+        )
+    elif last_error is not None and last_error in PRE_SPAWN_ERRORS:
+        judgment = ModelJudgment(
+            status=JudgmentStatus.UNAVAILABLE,
+            diagnostic=diagnostic.model_copy(
+                update={"unavailable_reason": last_error.value.lower()}
+            ),
         )
     else:
         judgment = ModelJudgment(status=JudgmentStatus.ERROR, diagnostic=diagnostic)
@@ -391,6 +402,7 @@ def build_backend(
     runner: CommandRunner,
     make_empty_dir: MakeEmptyDir,
     clock: Clock,
+    events: EventSink | None = None,
 ) -> ClaudeCliBackend | UnavailableBackend:
     """Builds the configured backend.
 
@@ -399,6 +411,7 @@ def build_backend(
         runner: The command runner (``sysio.SubprocessRunner`` in production).
         make_empty_dir: ``OutputRoot.make_empty_dir``.
         clock: The clock.
+        events: Receives backend events (``judge.workdir_cleanup_failed``).
 
     Returns:
         ``UnavailableBackend("backend_none")`` for ``backend = "none"``, else a
@@ -413,6 +426,7 @@ def build_backend(
         runner=runner,
         make_empty_dir=make_empty_dir,
         clock=clock,
+        events=events,
     )
 
 
@@ -427,6 +441,7 @@ def build_judge(
     repo_rel: Callable[[str], str],
     clean: Cleaner | None = None,
     seeded: bool | None = None,
+    events: EventSink | None = None,
 ) -> CliJudge:
     """Wires a ``CliJudge`` from configuration (convenience for the pipeline CLI).
 
@@ -440,12 +455,17 @@ def build_judge(
         repo_rel: ``AgentConfig.repo_rel``.
         clean: HTML cleaner (defaults to WS1's).
         seeded: Passed to ``CliJudge`` (``True`` for replay runs).
+        events: The run's event log, for backend events.
 
     Returns:
         The judge.
     """
     backend = build_backend(
-        settings, runner=runner, make_empty_dir=make_empty_dir, clock=clock
+        settings,
+        runner=runner,
+        make_empty_dir=make_empty_dir,
+        clock=clock,
+        events=events,
     )
     return CliJudge(
         backend,

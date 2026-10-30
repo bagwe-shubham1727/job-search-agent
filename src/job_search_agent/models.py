@@ -189,8 +189,18 @@ class RefusalCode(StrEnum):
 
 
 class BackendErrorKind(StrEnum):
-    """Why an attempted model call failed; every kind makes the judgment ``ERROR``."""
+    """Why a model call failed.
 
+    ``CLI_NOT_FOUND`` and ``WORKDIR_FAILED`` (``PRE_SPAWN_ERRORS``) mean no process
+    was started, so the judgment is ``UNAVAILABLE`` (CONTRACT §8: "If no model call
+    can be made, the status is UNAVAILABLE"). Every other kind is a call that was
+    attempted and failed, so the judgment is ``ERROR``.
+    """
+
+    CLI_NOT_FOUND = "CLI_NOT_FOUND"
+    """The executable was not on ``PATH`` at call time (no process started)."""
+    WORKDIR_FAILED = "WORKDIR_FAILED"
+    """The per-call empty working directory could not be made (no process started)."""
     SPAWN_FAILED = "SPAWN_FAILED"
     TIMEOUT = "TIMEOUT"
     NONZERO_EXIT = "NONZERO_EXIT"
@@ -199,6 +209,12 @@ class BackendErrorKind(StrEnum):
     """The CLI's JSON envelope lacks the expected fields."""
     IS_ERROR = "IS_ERROR"
     """The envelope reports ``is_error: true``."""
+
+
+PRE_SPAWN_ERRORS: frozenset[BackendErrorKind] = frozenset(
+    {BackendErrorKind.CLI_NOT_FOUND, BackendErrorKind.WORKDIR_FAILED}
+)
+"""Backend errors raised before any process started: the judgment is UNAVAILABLE."""
 
 
 class ExitCode(IntEnum):

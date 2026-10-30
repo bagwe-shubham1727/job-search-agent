@@ -17,9 +17,15 @@ any variable nobody has thought of yet.
 
 The prompt goes on stdin, never in argv. Each call runs in a fresh, empty working
 directory (``data/tmp/claude-<uuid>/`` via the injected maker, which is
-``OutputRoot.make_empty_dir`` in production) that is removed afterwards. ``--bare`` is
-never used: it skips OAuth and needs an API key, which §11 forbids. Removing the API
-key variables means the CLI cannot quietly fall back to API-key billing.
+``OutputRoot.make_empty_dir`` in production) that is removed afterwards. Removal is
+best effort: a failure emits ``judge.workdir_cleanup_failed`` and never replaces the
+reply. A failure before any process starts (the executable gone from ``PATH`` at
+call time, or the working directory not creatable) is ``CLI_NOT_FOUND`` or
+``WORKDIR_FAILED``, which the judge records as ``UNAVAILABLE`` (CONTRACT §8).
+
+``--bare`` is never used: it skips OAuth and needs an API key, which §11 forbids.
+Removing the API key variables means the CLI cannot quietly fall back to API-key
+billing.
 """
 
 from __future__ import annotations
@@ -36,13 +42,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from job_search_agent.errors import PathRejected
 from job_search_agent.models import (
     Availability,
     BackendErrorKind,
     BackendReply,
     CompletedCommand,
 )
-from job_search_agent.ports import Clock, CommandRunner
+from job_search_agent.ports import Clock, CommandRunner, EventSink
 
 ADDED_ENV: Mapping[str, str] = {
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
@@ -260,6 +267,7 @@ class ClaudeCliBackend:
         remove_dir: Removes the per-call directory afterwards (``shutil.rmtree``).
         new_id: Supplies the unique part of each directory name.
         home: Home directory for stderr sanitising (defaults to the real one).
+        events: Receives ``judge.workdir_cleanup_failed`` (the run's event log).
     """
 
     def __init__(
@@ -276,6 +284,7 @@ class ClaudeCliBackend:
         remove_dir: RemoveDir = shutil.rmtree,
         new_id: Callable[[], str] = lambda: uuid.uuid4().hex,
         home: str | None = None,
+        events: EventSink | None = None,
     ) -> None:
         self.executable = executable
         self.model_id = model_id
@@ -288,6 +297,7 @@ class ClaudeCliBackend:
         self._remove_dir = remove_dir
         self._new_id = new_id
         self._home = home
+        self._events = events
         self._availability: Availability | None = None
 
     @property
@@ -299,16 +309,32 @@ class ClaudeCliBackend:
         """Returns the child environment for the next call."""
         return child_env(os.environ if self._base_env is None else self._base_env)
 
-    def _run_in_fresh_dir(
-        self, argv: Sequence[str], stdin: str, timeout_s: float
+    def _make_workdir(self) -> Path | None:
+        """Makes the per-call empty directory; ``None`` if it cannot be made."""
+        try:
+            return self._make_empty_dir(f"{TMP_DIR_PREFIX}{self._new_id()}")
+        except (OSError, PathRejected):
+            return None
+
+    def _cleanup(self, workdir: Path) -> None:
+        """Removes the per-call directory; a failure is an event, never an error."""
+        try:
+            self._remove_dir(workdir)
+        except OSError as exc:
+            if self._events is not None:
+                self._events.emit(
+                    "judge.workdir_cleanup_failed", {"error": type(exc).__name__}
+                )
+
+    def _run_in(
+        self, workdir: Path, argv: Sequence[str], stdin: str, timeout_s: float
     ) -> CompletedCommand:
-        workdir = self._make_empty_dir(f"{TMP_DIR_PREFIX}{self._new_id()}")
         try:
             return self._runner.run(
                 argv, cwd=workdir, env=self.env(), stdin=stdin, timeout_s=timeout_s
             )
         finally:
-            self._remove_dir(workdir)
+            self._cleanup(workdir)
 
     def availability(self) -> Availability:
         """Checks that the executable is on ``PATH``; makes no model call.
@@ -326,12 +352,15 @@ class ClaudeCliBackend:
             self._availability = Availability(available=False, reason="cli_not_found")
             return self._availability
         version: str | None = None
-        try:
-            completed = self._run_in_fresh_dir(
-                (resolved, "--version"), "", VERSION_TIMEOUT_S
-            )
-        except OSError:
-            completed = None
+        completed: CompletedCommand | None = None
+        workdir = self._make_workdir()
+        if workdir is not None:
+            try:
+                completed = self._run_in(
+                    workdir, (resolved, "--version"), "", VERSION_TIMEOUT_S
+                )
+            except OSError:
+                completed = None
         if completed is not None and completed.returncode == 0:
             text = completed.stdout.strip()
             version = text.splitlines()[0] if text else None
@@ -345,18 +374,22 @@ class ClaudeCliBackend:
             prompt: The rendered prompt.
 
         Returns:
-            The reply. Spawn failure, timeout, non-zero exit, an unparseable envelope
-            and ``is_error: true`` are all returned as ``error`` values.
+            The reply. ``CLI_NOT_FOUND`` and ``WORKDIR_FAILED`` (nothing started),
+            spawn failure, timeout, non-zero exit, an unparseable envelope and
+            ``is_error: true`` are all returned as ``error`` values.
         """
         started = self._clock.now_utc()
         resolved = self._which(self.executable)
         display = self.display_argv
         if resolved is None:
-            return _failed(display, started, 0, BackendErrorKind.SPAWN_FAILED)
+            return _failed(display, started, 0, BackendErrorKind.CLI_NOT_FOUND)
+        workdir = self._make_workdir()
+        if workdir is None:
+            return _failed(display, started, 0, BackendErrorKind.WORKDIR_FAILED)
         argv = judge_argv(resolved, self.model_id)
         began = time.monotonic()
         try:
-            completed = self._run_in_fresh_dir(argv, prompt, self._timeout_s)
+            completed = self._run_in(workdir, argv, prompt, self._timeout_s)
         except OSError:
             elapsed = int((time.monotonic() - began) * 1000)
             return _failed(display, started, elapsed, BackendErrorKind.SPAWN_FAILED)

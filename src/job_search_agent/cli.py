@@ -187,6 +187,7 @@ def _judge(
     *,
     seeded: bool,
     read: Callable[[Path], bytes],
+    events: EventLog | None = None,
 ) -> tuple[Judge | None, str]:
     """Builds the Claude judge, or explains why judgments will be ``UNAVAILABLE``.
 
@@ -197,6 +198,7 @@ def _judge(
         runner: Runs ``claude``.
         seeded: Written into every raw-reply log (``True`` for replay runs).
         read: Reads the prompt file through the read policy.
+        events: The run's event log (backend cleanup events).
 
     Returns:
         ``(judge, unavailable_reason)``; ``judge`` is ``None`` for backend ``none``
@@ -215,6 +217,7 @@ def _judge(
         clock=clock,
         repo_rel=cfg.repo_rel,
         seeded=seeded,
+        events=events,
     )
     return judge, "backend_none"
 
@@ -276,7 +279,7 @@ def build_run_deps(
         url = provider.jobs_url(cfg.board.token)
         source = LiveSource(_fetcher(cfg, events, transport), url)
     judge, reason = _judge(
-        cfg, out, clock, runner, seeded=replay is not None, read=read
+        cfg, out, clock, runner, seeded=replay is not None, read=read, events=events
     )
     return RunDeps(
         config=cfg,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -10,6 +11,8 @@ from typing import Any
 
 import pytest
 
+from job_search_agent.errors import PathRejected
+from job_search_agent.events import EventLog
 from job_search_agent.judge.backend import (
     WITHHELD_STDERR,
     ClaudeCliBackend,
@@ -336,3 +339,71 @@ def test_child_env_keeps_allowlist_and_sets_r1_vars() -> None:
         "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
     }
     assert env["HOME"] == "/home/tester" and env["PATH"] == "/usr/bin:/bin"
+
+
+# --- review fix 7: error mapping before spawn, best-effort cleanup ---------------
+
+
+def _backend_with(
+    runner: Any,
+    tmp_path: Path,
+    *,
+    which: Any = None,
+    make_empty_dir: Any = None,
+    remove_dir: Any = None,
+    events: EventLog | None = None,
+) -> ClaudeCliBackend:
+    writer = MemoryWriter(tmp_path)
+    return ClaudeCliBackend(
+        executable="claude",
+        model_id=MODEL,
+        timeout_s=180.0,
+        runner=runner,
+        make_empty_dir=make_empty_dir or writer.make_empty_dir,
+        clock=FixedClock(datetime(2026, 10, 30, 2, 0, tzinfo=UTC)),
+        which=which or (lambda name: RESOLVED),
+        base_env=PARENT_ENV,
+        remove_dir=remove_dir or shutil.rmtree,
+        new_id=lambda: "id0",
+        home="/home/tester",
+        events=events,
+    )
+
+
+def test_cleanup_failure_never_replaces_a_real_reply(tmp_path: Path) -> None:
+    def broken_remove(path: Path) -> None:
+        raise PermissionError("cannot remove")
+
+    events = EventLog()
+    runner = FakeRunner([_done(_envelope())])
+    backend = _backend_with(runner, tmp_path, remove_dir=broken_remove, events=events)
+    reply = backend.complete("a")
+    assert reply.error is None and reply.result_text is not None
+    (event,) = [
+        e for e in events.events if e["event"] == "judge.workdir_cleanup_failed"
+    ]
+    assert event["error"] == "PermissionError"
+    assert str(tmp_path) not in json.dumps(event)
+
+
+def test_cli_gone_at_call_time_is_cli_not_found(tmp_path: Path) -> None:
+    runner = FakeRunner()
+    backend = _backend_with(runner, tmp_path, which=lambda name: None)
+    reply = backend.complete("a")
+    assert reply.error is BackendErrorKind.CLI_NOT_FOUND
+    assert runner.calls == []
+
+
+@pytest.mark.parametrize(
+    "exc", [PathRejected("not_empty", "tmp/claude-id0"), OSError("read-only")]
+)
+def test_workdir_failure_is_workdir_failed(tmp_path: Path, exc: Exception) -> None:
+    def broken_make(rel: str) -> Path:
+        raise exc
+
+    runner = FakeRunner()
+    backend = _backend_with(runner, tmp_path, make_empty_dir=broken_make)
+    reply = backend.complete("a")
+    assert reply.error is BackendErrorKind.WORKDIR_FAILED
+    assert runner.calls == []
+    assert backend.availability().available  # the version check tolerates it too

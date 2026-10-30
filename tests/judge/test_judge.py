@@ -406,3 +406,31 @@ def test_skill_terms_and_persona_label_are_not_an_echo(tmp_path: Path) -> None:
     run, _ = _run(backend, tmp_path)
     assert run.outcome.judgment.status is JudgmentStatus.VALID
     assert backend.calls == 1
+
+
+# --- review fix 7: no process started means UNAVAILABLE (CONTRACT §8) -------------
+
+
+@pytest.mark.parametrize(
+    ("kind", "reason"),
+    [
+        (BackendErrorKind.CLI_NOT_FOUND, "cli_not_found"),
+        (BackendErrorKind.WORKDIR_FAILED, "workdir_failed"),
+    ],
+)
+def test_failure_before_spawn_is_unavailable_not_error(
+    tmp_path: Path, kind: BackendErrorKind, reason: str
+) -> None:
+    backend = FakeBackend([kind])
+    run, _ = _run(backend, tmp_path)
+    judgment = run.outcome.judgment
+    assert judgment.status is JudgmentStatus.UNAVAILABLE
+    assert judgment.diagnostic.unavailable_reason == reason
+    assert backend.calls == 1  # never retried
+    assert judgment.diagnostic.attempts[0].backend_error is kind
+
+
+def test_failure_after_spawn_is_still_error(tmp_path: Path) -> None:
+    backend = FakeBackend([BackendErrorKind.SPAWN_FAILED])
+    run, _ = _run(backend, tmp_path)
+    assert run.outcome.judgment.status is JudgmentStatus.ERROR
