@@ -12,7 +12,7 @@ from job_search_agent.rule.verdict import evaluate, rule_inputs
 from tests.tools.builders import (
     fixture_resume,
     fixture_resume_data,
-    handcheck_board,
+    handcheck_verdicts,
     job,
     posting,
     posting_from_job,
@@ -85,7 +85,7 @@ def test_match_reason_states_every_gate() -> None:
 
 def test_match_implies_us_based() -> None:
     """Real data: every MATCH on the committed board has a US_BASED location."""
-    verdicts = [evaluate(p, RESUME) for p in handcheck_board().postings]
+    verdicts = [verdict for _, verdict in handcheck_verdicts()]
     matches = [v for v in verdicts if v.label is VerdictLabel.MATCH]
     assert matches
     assert all(v.location_check.label is LocationLabel.US_BASED for v in matches)

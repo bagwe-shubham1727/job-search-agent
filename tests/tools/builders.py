@@ -16,9 +16,10 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from job_search_agent.models import ParsedBoard, Posting, VerifiedResume
+from job_search_agent.models import ParsedBoard, Posting, RuleVerdict, VerifiedResume
 from job_search_agent.providers.greenhouse import GreenhouseProvider
 from job_search_agent.resume import load_verified_resume
+from job_search_agent.rule.verdict import evaluate
 from tests.conftest import (
     HANDCHECK_RAW_REL,
     PINNED_RESUME_SHA256,
@@ -129,6 +130,13 @@ def posting_from_job(raw_job: dict[str, Any]) -> Posting:
 def handcheck_board() -> ParsedBoard:
     """The committed §13 raw response, parsed once per test session."""
     return GreenhouseProvider().parse((REPO_ROOT / HANDCHECK_RAW_REL).read_bytes())
+
+
+@cache
+def handcheck_verdicts() -> tuple[tuple[Posting, RuleVerdict], ...]:
+    """Every committed §13 posting with its rule verdict, evaluated once per session."""
+    resume = fixture_resume()
+    return tuple((p, evaluate(p, resume)) for p in handcheck_board().postings)
 
 
 def handcheck_posting(posting_id: str) -> Posting:

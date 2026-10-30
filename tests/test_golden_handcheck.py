@@ -12,7 +12,12 @@ from job_search_agent.evidence_validator import validate_rule_evidence
 from job_search_agent.models import Gate, LocationLabel, RuleVerdict, VerdictLabel
 from job_search_agent.rule.verdict import evaluate
 from tests.conftest import RawHandcheck
-from tests.tools.builders import fixture_resume, fixture_resume_data, handcheck_board
+from tests.tools.builders import (
+    fixture_resume,
+    fixture_resume_data,
+    handcheck_board,
+    handcheck_verdicts,
+)
 
 CONTRACT_SHA256_PREFIX = "74e20e05ef226186"
 LANG = "$.skills.languages"
@@ -177,11 +182,10 @@ def test_handcheck_records_pass_evidence_validator(case: HandCheck) -> None:
 
 def test_every_board_verdict_passes_evidence_validator() -> None:
     """All 2026-10-29 postings: the rule's own records always validate."""
-    resume = fixture_resume()
     data = fixture_resume_data()
     failures = {
         p.posting_id: errors
-        for p in handcheck_board().postings
-        if (errors := validate_rule_evidence(evaluate(p, resume), p.raw, data))
+        for p, verdict in handcheck_verdicts()
+        if (errors := validate_rule_evidence(verdict, p.raw, data))
     }
     assert failures == {}
