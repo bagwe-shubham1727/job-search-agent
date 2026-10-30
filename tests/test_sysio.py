@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -101,6 +103,41 @@ def test_subprocess_runner_runs_and_times_out(tmp_path: Path) -> None:
         timeout_s=0.2,
     )
     assert slow.timed_out and slow.returncode is None
+
+
+def test_subprocess_runner_uses_argv_list_without_shell(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def fake_run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        seen["args"] = args
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(args, 0, b"out", b"err")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    done = SubprocessRunner().run(
+        ["claude", "-p"], cwd=tmp_path, env={"A": "1"}, stdin="hi", timeout_s=5
+    )
+    assert seen["args"] == ["claude", "-p"]
+    assert "shell" not in seen and seen["input"] == b"hi" and seen["env"] == {"A": "1"}
+    assert (done.returncode, done.stdout, done.stderr, done.timed_out) == (
+        0,
+        "out",
+        "err",
+        False,
+    )
+
+
+def test_subprocess_runner_timeout(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def fake_run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        raise subprocess.TimeoutExpired(args, 5, output=b"partial")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    done = SubprocessRunner().run(["x"], cwd=tmp_path, env={}, stdin="", timeout_s=5)
+    assert done.timed_out and done.returncode is None and done.stdout == "partial"
 
 
 # --- events ---------------------------------------------------------------------

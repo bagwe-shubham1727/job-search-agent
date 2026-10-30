@@ -11,7 +11,7 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Final, NoReturn, TypeGuard
+from typing import Any, Final, TypeGuard
 
 from job_search_agent.errors import ConfigError, InvalidResponse
 from job_search_agent.models import (
@@ -21,23 +21,12 @@ from job_search_agent.models import (
     Posting,
     Severity,
 )
+from job_search_agent.strict_json import reject_constant
 
 API_HOST: Final = "boards-api.greenhouse.io"
 """The only host this provider's URLs point to (CONTRACT §2, §11)."""
 
 _TOKEN_PATTERN: Final = re.compile(r"[a-z0-9][a-z0-9_-]*")
-
-
-def _reject_constant(name: str) -> NoReturn:
-    """Rejects the non-standard JSON constants ``NaN``, ``Infinity``, ``-Infinity``.
-
-    Args:
-        name: The constant's spelling.
-
-    Raises:
-        ValueError: Always.
-    """
-    raise ValueError(f"non-standard JSON constant {name}")
 
 
 def _is_json_int(value: object) -> TypeGuard[int]:
@@ -93,7 +82,7 @@ def _load_json(body: bytes) -> Any:  # noqa: ANN401 - arbitrary JSON document
         InvalidResponse: ``not_json`` if the bytes are not UTF-8 JSON.
     """
     try:
-        return json.loads(body.decode("utf-8"), parse_constant=_reject_constant)
+        return json.loads(body.decode("utf-8"), parse_constant=reject_constant)
     except (UnicodeDecodeError, ValueError, RecursionError) as exc:
         raise InvalidResponse("not_json", type(exc).__name__) from exc
 

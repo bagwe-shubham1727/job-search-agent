@@ -33,13 +33,13 @@ from job_search_agent.experiments._io import (
     STUDENT_MARKER,
     ExperimentContext,
     ExperimentError,
-    sha256_hex,
 )
 from job_search_agent.judge.backend import child_env, sanitize_stderr
 from job_search_agent.judge.payload import render_json
 from job_search_agent.judge.prompt import PromptContract
 from job_search_agent.judge.validator import Rejection, validate_reply
 from job_search_agent.ports import CommandRunner, HttpFetcher
+from job_search_agent.sources import sha256_hex
 
 OUT = "experiments/surfaces"
 SURFACES: tuple[str, ...] = ("a", "b", "c")

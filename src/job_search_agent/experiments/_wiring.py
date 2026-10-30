@@ -1,90 +1,36 @@
-"""Production wiring for ``jsa exp``: real adapters, WS1/WS2 modules imported lazily.
+"""Production wiring for ``jsa exp``: the real adapters, built on first use.
 
-Nothing here runs at import time. WS1 (``providers.greenhouse``, ``rule``,
-``text``) and WS2 (``fsio``, ``resume``, ``http``) are imported only when a command
-needs them, so this package works (and is testable) before those workstreams merge.
+Nothing here runs at import time. Each dependency is a cached property or a factory
+method, so a command builds only what it needs (``exp sampling table`` never loads
+the résumé, ``exp surfaces run c --dry-run`` never builds a fetcher).
 """
 
 from __future__ import annotations
 
-import importlib
 import os
 import shutil
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from functools import cached_property
 from pathlib import Path
-from typing import Any, cast
 
 from job_search_agent.clock import SystemClock
 from job_search_agent.config import AgentConfig, load_config
 from job_search_agent.experiments._calls import FirstReplyJudge
-from job_search_agent.experiments._io import (
-    ExperimentContext,
-    LocalRepoReader,
-)
+from job_search_agent.experiments._io import ExperimentContext, LocalRepoReader
 from job_search_agent.experiments.prompt_experiment import HANDCHECK_RAW_REL
-from job_search_agent.judge.backend import SubprocessRunner, child_env
+from job_search_agent.fsio import OutputRoot, ReadPolicy, create_output_root
+from job_search_agent.http import build_fetcher_from_settings
+from job_search_agent.judge.backend import child_env
 from job_search_agent.judge.judge import build_backend
-from job_search_agent.judge.payload import Cleaner
 from job_search_agent.judge.prompt import PromptContract, load_prompt
 from job_search_agent.judge.rawlog import RawReplyLog
 from job_search_agent.models import Posting, RuleVerdict, VerifiedResume
 from job_search_agent.ports import CommandRunner, HttpFetcher
-
-_GIT_TIMEOUT_S = 60.0
-
-
-class GitCli:
-    """``GitInspector`` backed by the ``git`` executable (read-only commands).
-
-    Args:
-        runner: Command runner.
-        repo_root: Repository root.
-        env: Environment for git (defaults to ``os.environ``).
-    """
-
-    def __init__(
-        self,
-        runner: CommandRunner,
-        repo_root: Path,
-        env: Mapping[str, str] | None = None,
-    ) -> None:
-        self._runner = runner
-        self._root = repo_root
-        self._env = dict(os.environ if env is None else env)
-
-    def _git(self, *args: str) -> tuple[int | None, str]:
-        done = self._runner.run(
-            ("git", *args),
-            cwd=self._root,
-            env=self._env,
-            stdin="",
-            timeout_s=_GIT_TIMEOUT_S,
-        )
-        return done.returncode, done.stdout
-
-    def head(self) -> str:
-        """Returns the full hash of HEAD."""
-        _, out = self._git("rev-parse", "HEAD")
-        return out.strip()
-
-    def is_dirty(self) -> bool:
-        """Returns True if tracked files differ from HEAD."""
-        _, out = self._git("status", "--porcelain", "--untracked-files=no")
-        return bool(out.strip())
-
-    def is_tracked_and_clean(self, path: Path) -> bool:
-        """Returns True if ``path`` is tracked and equal to HEAD (staged or not)."""
-        rel = path.as_posix()
-        code, _ = self._git("ls-files", "--error-unmatch", "--", rel)
-        if code != 0:
-            return False
-        code, _ = self._git("diff", "--quiet", "HEAD", "--", rel)
-        return code == 0
-
-
-def _module(name: str) -> Any:  # noqa: ANN401 - lazily imported module
-    return importlib.import_module(name)
+from job_search_agent.providers.greenhouse import GreenhouseProvider
+from job_search_agent.resume import load_verified_resume
+from job_search_agent.rule.verdict import evaluate as rule_evaluate
+from job_search_agent.sysio import SubprocessGit, SubprocessRunner
+from job_search_agent.text import clean_html
 
 
 class Wiring:
@@ -92,10 +38,14 @@ class Wiring:
 
     Args:
         config_path: ``--config`` value.
+        runner: Runs ``git`` and ``claude``; defaults to ``SubprocessRunner``.
     """
 
-    def __init__(self, config_path: Path) -> None:
+    def __init__(
+        self, config_path: Path, *, runner: CommandRunner | None = None
+    ) -> None:
         self._config_path = config_path
+        self._runner = runner
 
     @cached_property
     def config(self) -> AgentConfig:
@@ -104,13 +54,13 @@ class Wiring:
 
     @cached_property
     def runner(self) -> CommandRunner:
-        """The subprocess runner."""
-        return SubprocessRunner()
+        """The command runner (injected, or ``SubprocessRunner``)."""
+        return self._runner or SubprocessRunner()
 
     @cached_property
-    def out(self) -> Any:  # noqa: ANN401 - WS2 OutputRoot
-        """WS2 ``fsio.OutputRoot`` on the data directory."""
-        return _module("job_search_agent.fsio").OutputRoot(self.config.data_dir)
+    def out(self) -> OutputRoot:
+        """``fsio.OutputRoot`` on the data directory (created if absent)."""
+        return create_output_root(self.config.data_dir)
 
     @cached_property
     def context(self) -> ExperimentContext:
@@ -118,40 +68,36 @@ class Wiring:
         root = self.config.project_root
         return ExperimentContext(
             writer=self.out,
-            reader=LocalRepoReader(root),
-            git=GitCli(self.runner, root),
+            reader=LocalRepoReader(root, ReadPolicy(root).check),
+            git=SubprocessGit(root, runner=self.runner),
             clock=SystemClock(),
-            data_dir=self.config.data_dir.relative_to(root).as_posix(),
+            data_dir=self.config.data_dir.relative_to(root.resolve()).as_posix(),
         )
 
     @cached_property
     def resume(self) -> VerifiedResume:
-        """The verified résumé (WS2 gate)."""
-        gate = _module("job_search_agent.resume")
-        return cast(
-            VerifiedResume,
-            gate.load_verified_resume(
-                self.config.resume_path, self.config.resume.pinned_sha256
-            ),
+        """The verified résumé (the §12 gate)."""
+        return load_verified_resume(
+            self.config.resume_path,
+            self.config.resume.pinned_sha256,
+            project_root=self.config.project_root,
         )
 
-    @cached_property
-    def clean(self) -> Cleaner:
-        """WS1 ``text.clean_html``."""
-        return cast(Cleaner, _module("job_search_agent.text").clean_html)
+    @property
+    def clean(self) -> Callable[[str], str]:
+        """``text.clean_html``."""
+        return clean_html
 
     def evaluate(self) -> Callable[[Posting], RuleVerdict]:
-        """WS1's rule with the verified résumé bound."""
-        rule = _module("job_search_agent.rule.verdict")
+        """The rule with the verified résumé bound."""
         resume = self.resume
-        return lambda posting: cast(RuleVerdict, rule.evaluate(posting, resume))
+        return lambda posting: rule_evaluate(posting, resume)
 
     @cached_property
     def handcheck_postings(self) -> Sequence[Posting]:
-        """Postings of the committed hand-check raw file (WS1 parser)."""
-        provider = _module("job_search_agent.providers.greenhouse").GreenhouseProvider()
+        """Postings of the committed hand-check raw file."""
         body = self.context.reader.read_bytes(HANDCHECK_RAW_REL)
-        return tuple(provider.parse(body).postings)
+        return GreenhouseProvider().parse(body).postings
 
     def postings_by_id(self) -> dict[str, Posting]:
         """Hand-check postings keyed by ID."""
@@ -178,18 +124,8 @@ class Wiring:
         )
 
     def fetcher(self) -> HttpFetcher:
-        """WS2's allow-listed fetcher."""
-        http = self.config.http
-        return cast(
-            HttpFetcher,
-            _module("job_search_agent.http").build_fetcher(
-                http.allowed_hosts,
-                timeout_s=http.timeout_s,
-                max_bytes=http.max_bytes,
-                max_redirects=http.max_redirects,
-                user_agent=http.user_agent,
-            ),
-        )
+        """The allow-listed fetcher built from ``[http]``."""
+        return build_fetcher_from_settings(self.config.http)
 
     def child_env(self) -> dict[str, str]:
         """The R1 child environment."""

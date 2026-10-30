@@ -24,7 +24,6 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
@@ -389,69 +388,3 @@ class UnavailableBackend:
             RuntimeError: Always; callers must check ``availability`` first.
         """
         raise RuntimeError("UnavailableBackend.complete must not be called")
-
-
-class SubprocessRunner:
-    """The real ``CommandRunner``: ``subprocess.run`` without a shell."""
-
-    def run(
-        self,
-        argv: Sequence[str],
-        *,
-        cwd: Path,
-        env: Mapping[str, str],
-        stdin: str,
-        timeout_s: float,
-    ) -> CompletedCommand:
-        """Runs ``argv`` to completion or timeout.
-
-        Args:
-            argv: Program and arguments.
-            cwd: Working directory.
-            env: Complete child environment.
-            stdin: Text for the child's stdin.
-            timeout_s: Seconds before the child is killed.
-
-        Returns:
-            The captured result; on timeout ``timed_out`` is true and
-            ``returncode`` is ``None``.
-
-        Raises:
-            OSError: If the program cannot be started.
-        """
-        began = time.monotonic()
-        try:
-            proc = subprocess.run(  # noqa: S603 - argv list, never a shell
-                list(argv),
-                cwd=cwd,
-                env=dict(env),
-                input=stdin.encode("utf-8"),
-                capture_output=True,
-                timeout=timeout_s,
-                check=False,
-            )
-        except subprocess.TimeoutExpired as exc:
-            return CompletedCommand(
-                argv=tuple(argv),
-                returncode=None,
-                stdout=_decode(exc.stdout),
-                stderr=_decode(exc.stderr),
-                timed_out=True,
-                duration_ms=int((time.monotonic() - began) * 1000),
-            )
-        return CompletedCommand(
-            argv=tuple(argv),
-            returncode=proc.returncode,
-            stdout=_decode(proc.stdout),
-            stderr=_decode(proc.stderr),
-            timed_out=False,
-            duration_ms=int((time.monotonic() - began) * 1000),
-        )
-
-
-def _decode(data: bytes | str | None) -> str:
-    if data is None:
-        return ""
-    if isinstance(data, str):
-        return data
-    return data.decode("utf-8", errors="replace")

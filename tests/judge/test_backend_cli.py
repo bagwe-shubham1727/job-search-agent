@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -14,7 +13,6 @@ import pytest
 from job_search_agent.judge.backend import (
     WITHHELD_STDERR,
     ClaudeCliBackend,
-    SubprocessRunner,
     UnavailableBackend,
     sanitize_stderr,
 )
@@ -291,38 +289,3 @@ def test_unavailable_backend() -> None:
     assert backend.availability().reason == "backend_none"
     with pytest.raises(RuntimeError):
         backend.complete("x")
-
-
-def test_subprocess_runner_uses_argv_list_without_shell(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    seen: dict[str, Any] = {}
-
-    def fake_run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
-        seen["args"] = args
-        seen.update(kwargs)
-        return subprocess.CompletedProcess(args, 0, b"out", b"err")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    done = SubprocessRunner().run(
-        ["claude", "-p"], cwd=tmp_path, env={"A": "1"}, stdin="hi", timeout_s=5
-    )
-    assert seen["args"] == ["claude", "-p"]
-    assert "shell" not in seen and seen["input"] == b"hi" and seen["env"] == {"A": "1"}
-    assert (done.returncode, done.stdout, done.stderr, done.timed_out) == (
-        0,
-        "out",
-        "err",
-        False,
-    )
-
-
-def test_subprocess_runner_timeout(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    def fake_run(args: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
-        raise subprocess.TimeoutExpired(args, 5, output=b"partial")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    done = SubprocessRunner().run(["x"], cwd=tmp_path, env={}, stdin="", timeout_s=5)
-    assert done.timed_out and done.returncode is None and done.stdout == "partial"

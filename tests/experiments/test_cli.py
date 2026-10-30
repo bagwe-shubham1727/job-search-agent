@@ -10,11 +10,8 @@ import pytest
 
 from job_search_agent.cli import build_parser
 from job_search_agent.experiments._io import EXPERIMENT_REFUSED_EXIT
-from job_search_agent.experiments._wiring import GitCli
 from job_search_agent.experiments.cli import register
-from job_search_agent.models import CompletedCommand
 from tests.experiments.helpers import make_repo
-from tests.fakes import FakeRunner
 
 
 class _FakeWiring:
@@ -75,21 +72,3 @@ def test_sampling_table_success_prints_summary(
     args = parser.parse_args(["exp", "sampling", "table"])
     assert args.handler(args) == EXPERIMENT_REFUSED_EXIT  # no manifest yet
     assert "no sampling manifest" in capsys.readouterr().err
-
-
-def test_git_cli_gate_queries() -> None:
-    def done(code: int, out: str = "") -> CompletedCommand:
-        return CompletedCommand((), code, out, "", False, 1)
-
-    runner = FakeRunner([done(0, "abc\n"), done(0, ""), done(0), done(1), done(1)])
-    git = GitCli(runner, Path("/repo"), env={})
-    assert git.head() == "abc"
-    assert git.is_dirty() is False
-    assert (
-        git.is_tracked_and_clean(Path("data/x.json")) is False
-    )  # tracked, but differs
-    assert git.is_tracked_and_clean(Path("data/y.json")) is False  # untracked
-    argvs = [c.argv for c in runner.calls]
-    assert argvs[2] == ("git", "ls-files", "--error-unmatch", "--", "data/x.json")
-    assert argvs[3] == ("git", "diff", "--quiet", "HEAD", "--", "data/x.json")
-    assert argvs[4] == ("git", "ls-files", "--error-unmatch", "--", "data/y.json")

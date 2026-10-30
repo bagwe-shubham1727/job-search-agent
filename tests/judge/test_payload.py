@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from job_search_agent.judge._jsonpath import resolve
+from job_search_agent.jsonpath import resolve
 from job_search_agent.judge.payload import (
     build_posting_payload,
     build_resume_payload,
@@ -59,8 +59,8 @@ def test_resume_payload_preserves_indices() -> None:
         "$.projects[1].bullets[0]",
     ]
     for path in paths:
-        assert resolve(path, payload) == resolve(path, original), path
-    assert resolve("$.skills.backend[4]", payload) == "GraphQL"
+        assert resolve(payload, path) == resolve(original, path), path
+    assert resolve(payload, "$.skills.backend[4]") == "GraphQL"
 
 
 def test_resume_payload_rejects_unverified_mapping() -> None:

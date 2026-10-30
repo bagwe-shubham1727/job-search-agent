@@ -287,7 +287,7 @@ def test_every_bad_entry_reported() -> None:
 def test_injected_resolver_is_used() -> None:
     calls: list[str] = []
 
-    def resolver(path: str, document: object) -> object:
+    def resolver(document: object, path: str) -> object:
         calls.append(path)
         raise KeyError(path)
 

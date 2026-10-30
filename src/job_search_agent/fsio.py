@@ -393,6 +393,22 @@ class OutputRoot:
             return False
 
 
+def create_output_root(root: Path) -> OutputRoot:
+    """Creates the data directory if it is absent and returns its ``OutputRoot``.
+
+    Args:
+        root: The configured data directory.
+
+    Returns:
+        The output root.
+
+    Raises:
+        OSError: If the directory cannot be created.
+    """
+    Path(root).mkdir(parents=True, exist_ok=True)
+    return OutputRoot(root)
+
+
 class ReadPolicy:
     """Allowed read roots inside the project (PLAN §1.2).
 

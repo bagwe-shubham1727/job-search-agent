@@ -25,6 +25,8 @@ from typing import Any, Final
 
 from job_search_agent.errors import ConfigError, ResumeRefused
 from job_search_agent.models import RefusalCode, SkillEntry, VerifiedResume
+from job_search_agent.rule.skills import SKILL_PATHS, skill_entries_from_resume
+from job_search_agent.strict_json import reject_constant, reject_duplicate_keys
 
 PERSONA_NAME: Final = "Kiran Joshi"
 """The only approved persona (A13)."""
@@ -43,16 +45,8 @@ PHONE_PATTERN: Final = re.compile(
 TARGET_KEYS: Final = ("roles", "levels", "locations", "excluded")
 """The four ``$.target`` arrays (§4)."""
 
-COUNTED_SKILL_KEYS: Final = (
-    "languages",
-    "frontend",
-    "backend",
-    "data",
-    "messaging",
-    "cloud_devops",
-    "observability",
-)
-"""The seven skill arrays the rule counts, in §4 order."""
+COUNTED_SKILL_KEYS: Final = tuple(p.removeprefix("$.skills.") for p in SKILL_PATHS)
+"""The seven skill arrays the rule counts, in §4 order (owned by ``rule.skills``)."""
 
 REQUIRED_SKILL_KEYS: Final = (*COUNTED_SKILL_KEYS, "familiar_with_not_shipped")
 """All eight skill arrays that must be present (A13); the last is never counted."""
@@ -92,26 +86,11 @@ def _repo_relative(path: Path, project_root: Path) -> tuple[Path, str]:
     return absolute, resolved.relative_to(root).as_posix()
 
 
-def _reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    """``object_pairs_hook`` that refuses duplicate keys (they could hide values)."""
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate key")
-        result[key] = value
-    return result
-
-
-def _reject_constant(_name: str) -> Any:  # noqa: ANN401 - json hook signature
-    """``parse_constant`` hook that refuses ``NaN`` and ``Infinity``."""
-    raise ValueError("non-standard JSON constant")
-
-
 def _parse(data: bytes) -> Any:  # noqa: ANN401 - arbitrary JSON
     """Parses strict UTF-8 JSON; raises ``ValueError`` on anything else."""
     text = data.decode("utf-8")  # UnicodeDecodeError is a ValueError
     return json.loads(
-        text, object_pairs_hook=_reject_duplicates, parse_constant=_reject_constant
+        text, object_pairs_hook=reject_duplicate_keys, parse_constant=reject_constant
     )
 
 
@@ -250,7 +229,8 @@ def _require_verified(resume: object) -> VerifiedResume:
 def skill_entries(resume: VerifiedResume) -> tuple[SkillEntry, ...]:
     """Lists every countable skill with its JSON path, in §4 order.
 
-    ``$.skills.familiar_with_not_shipped`` is excluded (§4).
+    ``$.skills.familiar_with_not_shipped`` is excluded (§4). The extraction itself is
+    the rule's (``rule.skills.skill_entries_from_resume``), so both see the same list.
 
     Args:
         resume: The verified résumé.
@@ -261,12 +241,7 @@ def skill_entries(resume: VerifiedResume) -> tuple[SkillEntry, ...]:
     Raises:
         TypeError: If ``resume`` is not a ``VerifiedResume``.
     """
-    skills = _require_verified(resume).to_dict()["skills"]
-    return tuple(
-        SkillEntry(term, f"$.skills.{key}[{index}]")
-        for key in COUNTED_SKILL_KEYS
-        for index, term in enumerate(skills[key])
-    )
+    return skill_entries_from_resume(_require_verified(resume).to_dict())
 
 
 def target_roles(resume: VerifiedResume) -> tuple[str, ...]:

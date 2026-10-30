@@ -20,9 +20,9 @@ from typing import Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
+from job_search_agent import jsonpath
 from job_search_agent.clock import format_run_id, to_eastern
 from job_search_agent.config import ModelSettings
-from job_search_agent.judge import _jsonpath
 from job_search_agent.judge.backend import (
     ADDED_ENV,
     STRIPPED_ENV,
@@ -133,7 +133,7 @@ def judge_posting_detailed(
     model_requested: str | None,
     retry_once: bool = True,
     clean: Cleaner | None = None,
-    resolver: PathResolver = _jsonpath.resolve,
+    resolver: PathResolver = jsonpath.resolve,
     seeded: bool | None = None,
 ) -> JudgeRun:
     """Judges one posting and returns the outcome plus every attempt.
@@ -259,7 +259,7 @@ def judge_posting(
     model_requested: str | None,
     retry_once: bool = True,
     clean: Cleaner | None = None,
-    resolver: PathResolver = _jsonpath.resolve,
+    resolver: PathResolver = jsonpath.resolve,
     seeded: bool | None = None,
 ) -> JudgmentOutcome:
     """Judges one posting (see ``judge_posting_detailed``) and returns the outcome.
@@ -317,7 +317,7 @@ class CliJudge:
         *,
         model_requested: str | None,
         clean: Cleaner | None = None,
-        resolver: PathResolver = _jsonpath.resolve,
+        resolver: PathResolver = jsonpath.resolve,
         seeded: bool | None = None,
     ) -> None:
         self._backend = backend
@@ -367,7 +367,7 @@ def build_backend(
 
     Args:
         settings: ``[model]`` from ``config/agent.toml`` (after CLI overrides).
-        runner: The command runner (``backend.SubprocessRunner`` in production).
+        runner: The command runner (``sysio.SubprocessRunner`` in production).
         make_empty_dir: ``OutputRoot.make_empty_dir``.
         clock: The clock.
 

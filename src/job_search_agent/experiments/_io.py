@@ -10,7 +10,6 @@ Inputs and earlier outputs are read through ``RepoReader`` with repo-relative pa
 
 from __future__ import annotations
 
-import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -20,6 +19,7 @@ from typing import Any, ClassVar, Protocol
 from job_search_agent.errors import AgentError
 from job_search_agent.models import ExitCode
 from job_search_agent.ports import Clock, GitInspector
+from job_search_agent.sources import sha256_hex
 
 EXPERIMENT_REFUSED_EXIT = 6
 """Exit status of ``jsa exp ...`` when a gate refuses (distinct from run codes)."""
@@ -125,11 +125,6 @@ class ExperimentContext:
     def committed(self, data_rel: str) -> bool:
         """Returns True if an output is tracked by git and unchanged since commit."""
         return self.git.is_tracked_and_clean(Path(self.repo_rel(data_rel)))
-
-
-def sha256_hex(data: bytes) -> str:
-    """Returns the lowercase hex SHA-256 of ``data``."""
-    return hashlib.sha256(data).hexdigest()
 
 
 def read_json(reader: RepoReader, rel: str) -> Any:  # noqa: ANN401 - parsed JSON

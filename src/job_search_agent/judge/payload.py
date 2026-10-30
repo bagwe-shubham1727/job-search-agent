@@ -19,12 +19,12 @@ Validator paths resolve against exactly these objects (A18).
 from __future__ import annotations
 
 import hashlib
-import importlib
 import json
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, cast
 
 from job_search_agent.models import Posting, VerifiedResume
+from job_search_agent.text import clean_html
 
 TARGET_KEYS: tuple[str, ...] = ("roles", "levels", "locations", "excluded")
 """The four ``$.target`` arrays, in contract order (CONTRACT §4)."""
@@ -100,12 +100,6 @@ def build_resume_payload(resume: VerifiedResume) -> dict[str, Any]:
     return payload
 
 
-def _default_cleaner() -> Cleaner:
-    """Returns WS1's ``text.clean_html``, imported lazily."""
-    module = importlib.import_module("job_search_agent.text")
-    return cast(Cleaner, module.clean_html)
-
-
 def build_posting_payload(
     posting: Posting, *, clean: Cleaner | None = None
 ) -> dict[str, Any]:
@@ -119,7 +113,7 @@ def build_posting_payload(
         ``{"id", "title", "location": {"name"}, "content", "departments": [{"name"}]}``
         with ``location`` omitted when the posting has no ``location.name``.
     """
-    cleaner = clean if clean is not None else _default_cleaner()
+    cleaner = clean if clean is not None else clean_html
     payload: dict[str, Any] = {"id": posting.posting_id, "title": posting.title}
     if posting.location_name is not None:
         payload["location"] = {"name": posting.location_name}

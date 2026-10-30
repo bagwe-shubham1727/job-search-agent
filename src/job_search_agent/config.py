@@ -24,6 +24,7 @@ from pydantic import (
 )
 
 from job_search_agent.errors import ConfigError
+from job_search_agent.fsio import is_within
 
 DEFAULT_CONFIG_PATH = Path("config/agent.toml")
 """Default config location, relative to the current directory."""
@@ -116,11 +117,6 @@ class ConfigOverrides:
     model_backend: ModelBackendKind | None = None
 
 
-def _is_inside(child: Path, parent: Path) -> bool:
-    """Returns True if ``child`` is ``parent`` or below it (both already resolved)."""
-    return child == parent or child.is_relative_to(parent)
-
-
 class AgentConfig(_Section):
     """Validated configuration with resolved absolute paths.
 
@@ -188,13 +184,13 @@ class AgentConfig(_Section):
         if not self.project_root.is_absolute():
             raise ValueError("project_root must be absolute")
         root = self.project_root.resolve()
-        if not _is_inside(self.data_dir, root) or self.data_dir == root:
+        if not is_within(self.data_dir, root) or self.data_dir == root:
             raise ValueError("data.dir must be a directory inside the project root")
         for name, path in (
             ("data.state_file", self.state_path),
             ("data.seeded_state_file", self.seeded_state_path),
         ):
-            if not _is_inside(path, self.data_dir) or path == self.data_dir:
+            if not is_within(path, self.data_dir) or path == self.data_dir:
                 raise ValueError(f"{name} must resolve inside data.dir")
         if self.state_path == self.seeded_state_path:
             raise ValueError("live and seeded state files must differ")

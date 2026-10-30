@@ -10,7 +10,12 @@ import pytest
 
 from job_search_agent.config import ConfigOverrides, load_config
 from job_search_agent.errors import ConfigError, PathRejected
-from job_search_agent.fsio import OutputRoot, ReadPolicy, is_within
+from job_search_agent.fsio import (
+    OutputRoot,
+    ReadPolicy,
+    create_output_root,
+    is_within,
+)
 from tests.conftest import REPO_ROOT, RESUME_FIXTURE_REL
 
 
@@ -25,6 +30,14 @@ def test_write_inside_root_ok(tmp_root: OutputRoot) -> None:
     assert tmp_root.read_bytes("live/runs/r1/raw.json") == b"{}"
     assert tmp_root.exists("live/runs/r1/raw.json")
     assert not tmp_root.exists("live/runs/r2/raw.json")
+
+
+def test_create_output_root_creates_a_missing_data_dir(tmp_path: Path) -> None:
+    with pytest.raises(PathRejected):
+        OutputRoot(tmp_path / "fresh" / "data")
+    root = create_output_root(tmp_path / "fresh" / "data")
+    assert root.root == (tmp_path / "fresh" / "data").resolve()
+    assert create_output_root(tmp_path / "fresh" / "data").root == root.root
 
 
 @pytest.mark.parametrize("rel", ["../x", "a/../../x", "a/..", ".."])

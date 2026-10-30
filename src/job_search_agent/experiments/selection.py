@@ -1,7 +1,7 @@
 """Prompt-experiment selection, worksheets and hand-label files (PLAN §6.2).
 
-The rule is injected (``evaluate``) so this module never imports WS1 directly; the
-CLI wires WS1's ``rule.verdict.evaluate`` in lazily.
+The rule is injected (``evaluate``) so the draw is testable with synthetic verdicts;
+``experiments._wiring`` binds ``rule.verdict.evaluate`` to the verified résumé.
 
 Draw procedure (also written in ``experiments/prompt/PROCEDURE.md``):
 
@@ -27,6 +27,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from job_search_agent.experiments._io import ExperimentError
+from job_search_agent.judge.payload import Cleaner
 from job_search_agent.models import (
     Gate,
     LocationLabel,
@@ -63,8 +64,6 @@ SetName = Literal["dev", "heldout"]
 
 Evaluate = Callable[[Posting], RuleVerdict]
 """The deterministic rule for one posting (WS1 ``evaluate`` with the résumé bound)."""
-
-Cleaner = Callable[[str], str]
 
 
 def classify_stratum(verdict: RuleVerdict) -> str | None:

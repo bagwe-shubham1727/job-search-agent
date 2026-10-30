@@ -25,19 +25,24 @@ import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, NoReturn
+from typing import Any
 
 from pydantic import ValidationError
 
-from job_search_agent.judge import _jsonpath
+from job_search_agent import jsonpath
 from job_search_agent.models import JudgmentReply
+from job_search_agent.strict_json import (
+    DuplicateKeyError,
+    NonStandardConstantError,
+    reject_constant,
+    reject_duplicate_keys,
+)
 
-PathResolver = Callable[[str, Any], Any]
-"""``resolve(path, document) -> value``.
+PathResolver = Callable[[Any, str], Any]
+"""``resolve(document, path) -> value``; the default is WS1's ``jsonpath.resolve``.
 
-Must raise ``ValueError`` for a malformed path and ``LookupError`` for a path that does
-not exist. The default is the private resolver in ``judge._jsonpath``; WS1's
-``jsonpath.resolve`` can be injected if it follows the same contract.
+Must raise ``ValueError`` for a malformed path (``jsonpath.JsonPathSyntaxError``) and
+``LookupError`` for a path that does not exist (``jsonpath.PathNotFoundError``).
 """
 
 _JSON_WHITESPACE = " \t\n\r"
@@ -116,25 +121,6 @@ class PathFindings:
         return self.valid_entries < self.entries
 
 
-class _ParseRejectedError(ValueError):
-    def __init__(self, code: RejectionCode) -> None:
-        super().__init__(code.value)
-        self.code = code
-
-
-def _reject_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise _ParseRejectedError(RejectionCode.DUPLICATE_KEY)
-        result[key] = value
-    return result
-
-
-def _reject_constant(_name: str) -> NoReturn:
-    raise _ParseRejectedError(RejectionCode.NON_FINITE_NUMBER)
-
-
 def _framing_codes(text: str) -> list[RejectionCode]:
     """Returns the framing problems of ``text`` (empty list when the frame is ok)."""
     core = text.strip(_JSON_WHITESPACE)
@@ -165,10 +151,14 @@ def parse_reply_object(text: str) -> dict[str, Any] | Rejection:
         return Rejection(tuple(codes), (), text)
     try:
         obj = json.loads(
-            text, object_pairs_hook=_reject_duplicates, parse_constant=_reject_constant
+            text,
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=reject_constant,
         )
-    except _ParseRejectedError as exc:
-        return Rejection((exc.code,), (), text)
+    except DuplicateKeyError:
+        return Rejection((RejectionCode.DUPLICATE_KEY,), (), text)
+    except NonStandardConstantError:
+        return Rejection((RejectionCode.NON_FINITE_NUMBER,), (), text)
     except (json.JSONDecodeError, RecursionError):
         return Rejection((RejectionCode.NOT_JSON,), (), text)
     if not isinstance(obj, dict):  # pragma: no cover - the frame guarantees an object
@@ -200,7 +190,7 @@ def _check_path(
     if path == "$":
         return RejectionCode.PATH_IS_ROOT
     try:
-        resolver(path, document)
+        resolver(document, path)
     except LookupError:
         return not_found
     except ValueError:
@@ -213,7 +203,7 @@ def validate_reply(
     resume_payload: Mapping[str, Any],
     posting_payload: Mapping[str, Any],
     *,
-    resolver: PathResolver = _jsonpath.resolve,
+    resolver: PathResolver = jsonpath.resolve,
 ) -> ValidationResult:
     """Validates one reply against CONTRACT §8.
 
@@ -275,7 +265,7 @@ def evidence_path_findings(
     resume_payload: Mapping[str, Any],
     posting_payload: Mapping[str, Any],
     *,
-    resolver: PathResolver = _jsonpath.resolve,
+    resolver: PathResolver = jsonpath.resolve,
 ) -> PathFindings | None:
     """Measures evidence-path existence in any reply that parses as a JSON object.
 
