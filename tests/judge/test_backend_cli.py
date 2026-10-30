@@ -14,6 +14,7 @@ from job_search_agent.judge.backend import (
     WITHHELD_STDERR,
     ClaudeCliBackend,
     UnavailableBackend,
+    child_env,
     sanitize_stderr,
 )
 from job_search_agent.models import BackendErrorKind, CompletedCommand
@@ -289,3 +290,49 @@ def test_unavailable_backend() -> None:
     assert backend.availability().reason == "backend_none"
     with pytest.raises(RuntimeError):
         backend.complete("x")
+
+
+# --- review fix 2: the child environment is an allowlist ------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "ANTHROPIC_FOO",
+        "CLAUDE_CODE_USE_X",
+        "AWS_SECRET_ACCESS_KEY",
+        "HTTPS_PROXY",
+        "https_proxy",
+        "PYTHONPATH",
+    ],
+)
+def test_child_env_drops_unknown_variables(name: str) -> None:
+    env = child_env({**PARENT_ENV, name: "secret-value"})
+    assert name not in env
+    assert "secret-value" not in env.values()
+
+
+def test_child_env_keeps_allowlist_and_sets_r1_vars() -> None:
+    parent = {
+        "PATH": "/usr/bin:/bin",
+        "HOME": "/home/tester",
+        "USER": "tester",
+        "LOGNAME": "tester",
+        "SHELL": "/bin/zsh",
+        "LANG": "en_US.UTF-8",
+        "LC_ALL": "en_US.UTF-8",
+        "LC_CTYPE": "UTF-8",
+        "TERM": "xterm",
+        "TMPDIR": "/var/tester/tmp",
+        "__CF_USER_TEXT_ENCODING": "0x1F5:0x0:0x0",
+        "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "0",
+        "ANTHROPIC_API_KEY": "sk-ant-test-0000000000000000",
+    }
+    env = child_env(parent)
+    assert env == {
+        **{k: v for k, v in parent.items() if not k.startswith(("CLAUDE", "ANTH"))},
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+        "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+        "ENABLE_CLAUDEAI_MCP_SERVERS": "false",
+    }
+    assert env["HOME"] == "/home/tester" and env["PATH"] == "/usr/bin:/bin"

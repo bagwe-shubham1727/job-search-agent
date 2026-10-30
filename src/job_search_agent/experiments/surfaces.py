@@ -34,7 +34,7 @@ from job_search_agent.experiments._io import (
     ExperimentContext,
     ExperimentError,
 )
-from job_search_agent.judge.backend import child_env, sanitize_stderr
+from job_search_agent.judge.backend import STRIPPED_ENV, child_env, sanitize_stderr
 from job_search_agent.judge.payload import render_json
 from job_search_agent.judge.prompt import PromptContract
 from job_search_agent.judge.validator import Rejection, validate_reply
@@ -378,7 +378,9 @@ def cmd_run(
     base = f"{OUT}/{surface}"
     display = tuple(prepared["surfaces"][surface]["argv"])
     env = child_env(base_env)
-    removed = sorted(set(base_env) - set(env))
+    # The child env is an allowlist (PLAN R9): every other parent variable is dropped
+    # too, but only the documented R1 names are recorded, never the parent's names.
+    removed = sorted(name for name in base_env if name in STRIPPED_ENV)
     if dry_run:
         return {"surface": surface, "argv": list(display), "env_removed": removed}
     if ctx.data_exists(f"{base}/run.json"):

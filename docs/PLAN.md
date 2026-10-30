@@ -31,6 +31,12 @@
 - **R7 — commits.** No `Co-Authored-By` trailers (student's instruction). Commit subjects are imperative and say
   which workstream they belong to. Claude's authorship goes in SOURCES.md.
 - **R8 — no installs outside the project.** Only `uv sync` into the project `.venv`. Nothing global.
+- **R9 — child environment is an allowlist (2026-10-30, review fix 2).** R1's "remove these five variables"
+  was a denylist and failed open for any variable nobody listed (a new `ANTHROPIC_*` or `CLAUDE_CODE_USE_*`
+  switch, cloud credentials, proxy settings). `judge.backend.child_env` now copies only `PATH`, `HOME`, `USER`,
+  `LOGNAME`, `SHELL`, `LANG`, `LC_*`, `TERM`, `TMPDIR` and (macOS) `__CF_USER_TEXT_ENCODING` from the parent,
+  then sets the three R1 variables. `STRIPPED_ENV` stays only as documentation and for the probe report's
+  `env_removed`. The judge and the surface experiments share this function.
 
 I read the frozen contract, both assignments, the fixture, the raw hand-check file and its meta. I also checked the installed `claude` CLI (v2.1.312) help text. Before planning I ran a throwaway read-only prototype of the §6 rule (in a sandbox, nothing written) over the committed raw file. The data facts that shaped the plan:
 

@@ -7,6 +7,10 @@ per call with exactly the argv and environment of PLAN amendment R1::
          ENABLE_CLAUDEAI_MCP_SERVERS=false
          (ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL,
           CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX removed)
+
+Since PLAN amendment R9 the environment is built from an allowlist (``ALLOWED_ENV``
+plus ``LC_*``) rather than by removing the R1 names, so the removal above holds for
+any variable nobody has thought of yet.
     claude -p --no-session-persistence --tools "" --disallowedTools "mcp__*"
            --strict-mcp-config --setting-sources project --safe-mode
            --output-format json --model <model_id>
@@ -47,6 +51,24 @@ ADDED_ENV: Mapping[str, str] = {
 }
 """Variables set in the child environment (R1)."""
 
+ALLOWED_ENV: frozenset[str] = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "LANG",
+        "TERM",
+        "TMPDIR",
+        "__CF_USER_TEXT_ENCODING",  # macOS text encoding for the child
+    }
+)
+"""Parent variables copied into the child environment (PLAN R9); nothing else is."""
+
+ALLOWED_ENV_PREFIXES: tuple[str, ...] = ("LC_",)
+"""Parent variable-name prefixes also copied (locale settings, PLAN R9)."""
+
 STRIPPED_ENV: tuple[str, ...] = (
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_AUTH_TOKEN",
@@ -54,7 +76,9 @@ STRIPPED_ENV: tuple[str, ...] = (
     "CLAUDE_CODE_USE_BEDROCK",
     "CLAUDE_CODE_USE_VERTEX",
 )
-"""Variables removed from the child environment (R1, CONTRACT §11)."""
+"""The R1 credential and provider switches, kept as documentation and for the probe
+report (``env_removed``). Since R9 the child environment is an allowlist, so these
+(and every other variable not in ``ALLOWED_ENV``) are never passed through."""
 
 WITHHELD_STDERR = "[withheld: credential pattern]"
 
@@ -105,7 +129,12 @@ def judge_argv(executable: str, model_id: str) -> tuple[str, ...]:
 
 
 def child_env(base: Mapping[str, str]) -> dict[str, str]:
-    """Builds the child environment: ``base`` minus ``STRIPPED_ENV`` plus ``ADDED_ENV``.
+    """Builds the child environment from an allowlist, plus ``ADDED_ENV`` (PLAN R9).
+
+    Only ``ALLOWED_ENV`` names and ``LC_*`` locale variables are copied from
+    ``base``; everything else (an unknown ``ANTHROPIC_*`` or ``CLAUDE_CODE_USE_*``
+    switch, cloud credentials, proxy settings) is dropped, so a new variable fails
+    closed. The three R1 variables are then set, overriding any parent value.
 
     Args:
         base: The parent environment (normally ``os.environ``).
@@ -113,7 +142,11 @@ def child_env(base: Mapping[str, str]) -> dict[str, str]:
     Returns:
         A new mapping; ``base`` is not modified.
     """
-    env = {k: v for k, v in base.items() if k not in STRIPPED_ENV}
+    env = {
+        k: v
+        for k, v in base.items()
+        if k in ALLOWED_ENV or k.startswith(ALLOWED_ENV_PREFIXES)
+    }
     env.update(ADDED_ENV)
     return env
 
