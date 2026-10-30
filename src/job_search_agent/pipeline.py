@@ -45,7 +45,6 @@ from job_search_agent.errors import (
 )
 from job_search_agent.events import EventLog
 from job_search_agent.models import (
-    DataQualityIssue,
     FetchKind,
     JudgmentDiagnostic,
     JudgmentOutcome,
@@ -59,6 +58,7 @@ from job_search_agent.models import (
     RuleVerdict,
     RunMode,
     RunReport,
+    RunStatus,
     SeenState,
     SourceKind,
     SourceResult,
@@ -211,6 +211,27 @@ class _Run:
     notes: list[str] = field(default_factory=list)
 
 
+@dataclass
+class _Judged:
+    """Records and outcomes produced by one run's judging pass."""
+
+    records: list[OutputRecord] = field(default_factory=list)
+    retried: list[OutputRecord] = field(default_factory=list)
+    outcomes: dict[str, JudgmentOutcome] = field(default_factory=dict)
+    pending_sources: dict[str, RawRef] = field(default_factory=dict)
+    new_ids: list[str] = field(default_factory=list)
+    retried_ids: list[str] = field(default_factory=list)
+
+
+def _note_once(run: _Run, note: str) -> None:
+    if note not in run.notes:
+        run.notes.append(note)
+
+
+def _is_valid(record: OutputRecord) -> bool:
+    return record.model_judgment.status is JudgmentStatus.VALID
+
+
 def _record_dump(records: Sequence[OutputRecord]) -> list[dict[str, Any]]:
     return [r.model_dump(mode="json") for r in records]
 
@@ -267,7 +288,13 @@ class _Pipeline:
         with self.d.out.lock(lock_rel(seeded=self.d.seeded)):
             return self._run_locked(resume)
 
-    def _run_locked(self, resume: VerifiedResume) -> RunReport:
+    def _start_run(self) -> _Run:
+        """Loads the prior state, claims the run folder and saves ``state.before``.
+
+        Raises:
+            StateCorrupt: The state file is invalid (nothing is written).
+            RunIdTaken: This second's run folder already exists.
+        """
         prior_bytes, prior = self._load_prior()
         started = self.d.clock.now_utc()
         run_id = format_run_id(started, seeded=self.d.seeded)
@@ -289,11 +316,15 @@ class _Pipeline:
                 "baseline": prior is None,
             },
         )
+        before_rel = f"{run_rel}/state.before.json"
         if prior_bytes is None:
-            self.d.out.write_json_atomic(f"{run_rel}/state.before.json", None)
+            self.d.out.write_json_atomic(before_rel, None)
         else:
-            self.d.out.write_bytes_atomic(f"{run_rel}/state.before.json", prior_bytes)
+            self.d.out.write_bytes_atomic(before_rel, prior_bytes)
+        return run
 
+    def _run_locked(self, resume: VerifiedResume) -> RunReport:
+        run = self._start_run()
         fetched_at = self.d.clock.now_utc()
         src = self.d.source.obtain()
         self._emit_source(src)
@@ -532,68 +563,126 @@ class _Pipeline:
         resume: VerifiedResume,
         fetched_at: datetime,
     ) -> RunReport:
-        prior = run.prior
-        records: list[OutputRecord] = []
-        retried: list[OutputRecord] = []
-        outcomes: dict[str, JudgmentOutcome] = {}
-        pending_sources: dict[str, RawRef] = {}
-        new_ids: list[str] = []
-        retried_ids: list[str] = []
-        if prior is not None:
+        judged = _Judged()
+        if run.prior is not None:
             resume_data = resume.to_dict()
-            seen = set(prior.seen_ids)
-            current = {p.posting_id: p for p in board.postings}
-            for posting in board.postings:
-                if posting.posting_id in seen:
-                    continue
-                new_ids.append(posting.posting_id)
-                record, outcome = self._record(run, posting, resume, resume_data)
-                records.append(record)
-                outcomes[posting.posting_id] = outcome
-                pending_sources[posting.posting_id] = RawRef(
-                    path=raw_ref.path, sha256=raw_ref.sha256, index=posting.index
-                )
-            for pending in prior.pending:
-                found, origin = self._pending_posting(pending, current)
-                self.d.events.emit(
-                    "pending.retry",
-                    {"posting_id": pending.posting_id, "posting_from": origin},
-                )
-                if found is None:
-                    if NOTE_PENDING_SOURCE_UNAVAILABLE not in run.notes:
-                        run.notes.append(NOTE_PENDING_SOURCE_UNAVAILABLE)
-                    continue
-                retried_ids.append(pending.posting_id)
-                record, outcome = self._record(run, found, resume, resume_data)
-                retried.append(record)
-                outcomes[pending.posting_id] = outcome
+            self._judge_new(run, run.prior, board, raw_ref, resume, resume_data, judged)
+            self._retry_pending(run, run.prior, board, resume, resume_data, judged)
+        records_saved = self._save_records(run, judged)
+        new_state = self._advance(run, src, board, judged, fetched_at)
+        state_saved = self._save_state(run, new_state, records_saved=records_saved)
+        return self._finish(
+            run,
+            src,
+            raw_ref,
+            FetchKind.OK,
+            board=board,
+            judged=judged,
+            unresolved=[p.posting_id for p in new_state.pending],
+            records_saved=records_saved,
+            state_saved=state_saved,
+        )
 
+    def _judge_new(
+        self,
+        run: _Run,
+        prior: SeenState,
+        board: ParsedBoard,
+        raw_ref: RawRef,
+        resume: VerifiedResume,
+        resume_data: Mapping[str, Any],
+        judged: _Judged,
+    ) -> None:
+        """Judges every posting not in ``prior.seen_ids``, in board order."""
+        seen = set(prior.seen_ids)
+        for posting in board.postings:
+            if posting.posting_id in seen:
+                continue
+            judged.new_ids.append(posting.posting_id)
+            record, outcome = self._record(run, posting, resume, resume_data)
+            judged.records.append(record)
+            judged.outcomes[posting.posting_id] = outcome
+            judged.pending_sources[posting.posting_id] = RawRef(
+                path=raw_ref.path, sha256=raw_ref.sha256, index=posting.index
+            )
+
+    def _retry_pending(
+        self,
+        run: _Run,
+        prior: SeenState,
+        board: ParsedBoard,
+        resume: VerifiedResume,
+        resume_data: Mapping[str, Any],
+        judged: _Judged,
+    ) -> None:
+        """Retries every pending judgment, from the board or its saved raw (A26)."""
+        current = {p.posting_id: p for p in board.postings}
+        for pending in prior.pending:
+            found, origin = self._pending_posting(pending, current)
+            self.d.events.emit(
+                "pending.retry",
+                {"posting_id": pending.posting_id, "posting_from": origin},
+            )
+            if found is None:
+                _note_once(run, NOTE_PENDING_SOURCE_UNAVAILABLE)
+                continue
+            judged.retried_ids.append(pending.posting_id)
+            record, outcome = self._record(run, found, resume, resume_data)
+            judged.retried.append(record)
+            judged.outcomes[pending.posting_id] = outcome
+
+    def _save_records(self, run: _Run, judged: _Judged) -> bool:
+        """Writes ``records.json`` then ``retried.json``; False if either failed."""
         records_saved = _try_write(
             lambda: self.d.out.write_json_atomic(
-                f"{run.run_rel}/records.json", _record_dump(records), sort_keys=False
+                f"{run.run_rel}/records.json",
+                _record_dump(judged.records),
+                sort_keys=False,
             )
         ) and _try_write(
             lambda: self.d.out.write_json_atomic(
-                f"{run.run_rel}/retried.json", _record_dump(retried), sort_keys=False
+                f"{run.run_rel}/retried.json",
+                _record_dump(judged.retried),
+                sort_keys=False,
             )
         )
         self.d.events.emit(
             "records.saved",
-            {"ok": records_saved, "new": len(records), "retried": len(retried)},
+            {
+                "ok": records_saved,
+                "new": len(judged.records),
+                "retried": len(judged.retried),
+            },
         )
+        return records_saved
+
+    def _advance(
+        self,
+        run: _Run,
+        src: SourceResult,
+        board: ParsedBoard,
+        judged: _Judged,
+        fetched_at: datetime,
+    ) -> SeenState:
+        """Computes the next state (pure ``state.advance``)."""
         original = src.original_fetched_at_utc
-        new_state = advance(
-            prior,
+        return advance(
+            run.prior,
             valid_ids=set(board.valid_ids),
             run_id=run.run_id,
             fetched_at=original if (self.d.seeded and original) else fetched_at,
             run_started_at=run.started_at,
-            outcomes=outcomes,
-            pending_sources=pending_sources,
+            outcomes=judged.outcomes,
+            pending_sources=judged.pending_sources,
             provider=self.d.provider.name,
             board=self.cfg.board.token,
             seeded=self.d.seeded,
         )
+
+    def _save_state(
+        self, run: _Run, new_state: SeenState, *, records_saved: bool
+    ) -> bool:
+        """Writes the state, only after the records are on disk (crash-safe order)."""
         state_saved = False
         if records_saved:
             data = state_to_bytes(new_state)
@@ -614,20 +703,7 @@ class _Pipeline:
                 "pending": len(new_state.pending),
             },
         )
-        return self._finish(
-            run,
-            src,
-            raw_ref,
-            FetchKind.OK,
-            board=board,
-            records=records,
-            retried=retried,
-            new_ids=new_ids,
-            retried_ids=retried_ids,
-            unresolved=[p.posting_id for p in new_state.pending],
-            records_saved=records_saved,
-            state_saved=state_saved,
-        )
+        return state_saved
 
     def _finish(
         self,
@@ -637,73 +713,52 @@ class _Pipeline:
         fetch_kind: FetchKind,
         *,
         board: ParsedBoard | None,
-        records: Sequence[OutputRecord] = (),
-        retried: Sequence[OutputRecord] = (),
-        new_ids: Sequence[str] = (),
-        retried_ids: Sequence[str] = (),
+        judged: _Judged | None = None,
         unresolved: Sequence[str] | None = None,
         records_saved: bool = False,
         state_saved: bool = False,
     ) -> RunReport:
-        judged = [*records, *retried]
-        counts: dict[JudgmentStatus, int] = {}
-        for record in judged:
-            status = record.model_judgment.status
-            counts[status] = counts.get(status, 0) + 1
+        judged = judged if judged is not None else _Judged()
         if unresolved is None:
             unresolved = [p.posting_id for p in run.prior.pending] if run.prior else []
+        all_records = [*judged.records, *judged.retried]
         decision = explain_status(
             fetch=fetch_kind,
             is_baseline=run.prior is None,
-            new_count=len(new_ids),
-            failed_judgments=sum(
-                1 for r in judged if r.model_judgment.status is not JudgmentStatus.VALID
-            ),
+            new_count=len(judged.new_ids),
+            failed_judgments=sum(1 for r in all_records if not _is_valid(r)),
             unresolved_pending=len(unresolved),
             data_quality_errors=board.error_count if board else 0,
             records_saved=records_saved,
             state_saved=state_saved,
-            rule_evidence_errors=sum(1 for r in judged if r.rule_evidence_errors),
+            rule_evidence_errors=sum(1 for r in all_records if r.rule_evidence_errors),
         )
-        if self.d.judge is None and judged and NOTE_JUDGE_UNAVAILABLE not in run.notes:
-            run.notes.append(NOTE_JUDGE_UNAVAILABLE)
-        finished = self.d.clock.now_utc()
-        fetch = src.fetch
-        issues: list[DataQualityIssue] = list(board.data_quality) if board else []
-        parsed = fetch_kind in (FetchKind.OK, FetchKind.EMPTY) and board is not None
-        backend = self.cfg.model.backend
-        report = RunReport(
-            run_id=run.run_id,
-            mode=RunMode.REPLAY if self.d.seeded else RunMode.LIVE,
-            seeded=self.d.seeded,
+        if self.d.judge is None and all_records:
+            _note_once(run, NOTE_JUDGE_UNAVAILABLE)
+        report = _build_run_report(
+            _ReportInputs(
+                run=run,
+                src=src,
+                raw_ref=raw_ref,
+                fetch_kind=fetch_kind,
+                board=board,
+                judged=judged,
+                unresolved=list(unresolved),
+                records_saved=records_saved,
+                state_saved=state_saved,
+                status=decision.status,
+                notes=[*run.notes, *decision.notes],
+            ),
+            config=self.cfg,
             provider=self.d.provider.name,
-            board=self.cfg.board.token,
-            code_commit=run.code_commit,
-            code_dirty=run.code_dirty,
-            started_at_utc=run.started_at,
-            started_at_et=to_eastern(run.started_at),
-            finished_at_utc=finished,
-            finished_at_et=to_eastern(finished),
-            status=decision.status,
-            fetched_count=board.fetched_count if parsed and board else None,
-            unique_valid_ids=len(board.postings) if parsed and board else None,
-            new_count=len(new_ids),
-            new_ids=list(new_ids),
-            retried_pending_ids=list(retried_ids),
-            unresolved_pending_ids=list(unresolved),
-            judgment_counts=counts,
-            data_quality_issues=issues,
-            records_saved=records_saved,
-            state_saved=state_saved,
-            raw_evidence=raw_ref,
-            original_fetched_at_utc=src.original_fetched_at_utc,
-            fetch_error=src.error,
-            http_status=fetch.status_code if fetch else None,
-            model_backend=backend,
-            model_id=self.cfg.model.model_id if backend != "none" else None,
-            prompt_version=self.cfg.model.prompt_version if backend != "none" else None,
-            notes=[*run.notes, *decision.notes],
+            seeded=self.d.seeded,
+            finished=self.d.clock.now_utc(),
         )
+        self._write_report(run, report, judged)
+        return report
+
+    def _write_report(self, run: _Run, report: RunReport, judged: _Judged) -> None:
+        """Writes ``report.json`` and ``report.md`` and prints the terminal summary."""
         self.d.out.write_json_atomic(
             f"{run.run_rel}/report.json",
             report.model_dump(mode="json"),
@@ -711,15 +766,93 @@ class _Pipeline:
         )
         self.d.out.write_bytes_atomic(
             f"{run.run_rel}/report.md",
-            render_markdown(report, records, retried).encode("utf-8"),
+            render_markdown(report, judged.records, judged.retried).encode("utf-8"),
         )
         self.d.events.emit(
             "run.finished",
-            {"status": report.status.value, "state_saved": state_saved},
+            {"status": report.status.value, "state_saved": report.state_saved},
         )
         if self.d.terminal is not None:
-            self.d.terminal(render_terminal(report, records, retried))
-        return report
+            self.d.terminal(render_terminal(report, judged.records, judged.retried))
+
+
+@dataclass(frozen=True)
+class _ReportInputs:
+    """Everything one run decided, gathered for ``_build_run_report``."""
+
+    run: _Run
+    src: SourceResult
+    raw_ref: RawRef | None
+    fetch_kind: FetchKind
+    board: ParsedBoard | None
+    judged: _Judged
+    unresolved: list[str]
+    records_saved: bool
+    state_saved: bool
+    status: RunStatus
+    notes: list[str]
+
+
+def _build_run_report(
+    facts: _ReportInputs,
+    *,
+    config: AgentConfig,
+    provider: str,
+    seeded: bool,
+    finished: datetime,
+) -> RunReport:
+    """Builds the ``report.json`` model from what a run decided (no I/O).
+
+    Args:
+        facts: The run's bookkeeping, status and notes.
+        config: The configuration (board, model settings).
+        provider: The provider's registry name.
+        seeded: True for a replay run.
+        finished: When the run finished.
+
+    Returns:
+        The report.
+    """
+    run, src, board = facts.run, facts.src, facts.board
+    fetch = src.fetch
+    parsed = facts.fetch_kind in (FetchKind.OK, FetchKind.EMPTY) and board is not None
+    counts: dict[JudgmentStatus, int] = {}
+    for record in [*facts.judged.records, *facts.judged.retried]:
+        status = record.model_judgment.status
+        counts[status] = counts.get(status, 0) + 1
+    backend = config.model.backend
+    return RunReport(
+        run_id=run.run_id,
+        mode=RunMode.REPLAY if seeded else RunMode.LIVE,
+        seeded=seeded,
+        provider=provider,
+        board=config.board.token,
+        code_commit=run.code_commit,
+        code_dirty=run.code_dirty,
+        started_at_utc=run.started_at,
+        started_at_et=to_eastern(run.started_at),
+        finished_at_utc=finished,
+        finished_at_et=to_eastern(finished),
+        status=facts.status,
+        fetched_count=board.fetched_count if parsed and board else None,
+        unique_valid_ids=len(board.postings) if parsed and board else None,
+        new_count=len(facts.judged.new_ids),
+        new_ids=list(facts.judged.new_ids),
+        retried_pending_ids=list(facts.judged.retried_ids),
+        unresolved_pending_ids=facts.unresolved,
+        judgment_counts=counts,
+        data_quality_issues=list(board.data_quality) if board else [],
+        records_saved=facts.records_saved,
+        state_saved=facts.state_saved,
+        raw_evidence=facts.raw_ref,
+        original_fetched_at_utc=src.original_fetched_at_utc,
+        fetch_error=src.error,
+        http_status=fetch.status_code if fetch else None,
+        model_backend=backend,
+        model_id=config.model.model_id if backend != "none" else None,
+        prompt_version=config.model.prompt_version if backend != "none" else None,
+        notes=facts.notes,
+    )
 
 
 def run_once(deps: RunDeps) -> RunReport:

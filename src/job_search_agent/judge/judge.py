@@ -66,7 +66,7 @@ from job_search_agent.models import (
     VerifiedResume,
 )
 from job_search_agent.ports import Clock, CommandRunner, EventSink, ModelBackend
-from job_search_agent.privacy import sensitive_values
+from job_search_agent.privacy import SensitiveValue, sensitive_values
 from job_search_agent.resume import PERSONA_LABEL
 
 
@@ -187,105 +187,180 @@ def judge_posting_detailed(
         raise TypeError("the judge accepts only a VerifiedResume (CONTRACT §12)")
     availability = backend.availability()
     if not availability.available:
-        judgment = ModelJudgment(
-            status=JudgmentStatus.UNAVAILABLE,
-            diagnostic=JudgmentDiagnostic(
-                prompt_id=prompt.prompt_id,
-                prompt_sha256=prompt.sha256,
-                model_requested=model_requested,
-                unavailable_reason=availability.reason or "unavailable",
-            ),
+        return _unavailable_run(
+            prompt, posting, model_requested, availability.reason or "unavailable"
         )
-        return JudgeRun(JudgmentOutcome(posting.posting_id, judgment), (), None, None)
-
     resume_payload = build_resume_payload(resume)
     posting_payload = build_posting_payload(posting, clean=clean)
-    digest = payload_sha256(resume_payload, posting_payload)
-    text = prompt.render(render_json(resume_payload), render_json(posting_payload))
-    echo_values = sensitive_values(resume)
-    echo_allow = echo_allow_list(resume_payload)
-
-    attempts: list[JudgeAttempt] = []
-    max_attempts = 2 if retry_once else 1
-    final: ValidationResult | None = None
-    for number in range(1, max_attempts + 1):
-        reply = backend.complete(text)
-        result: ValidationResult | None = None
-        if reply.ok and reply.result_text is not None:
-            result = validate_reply(
-                reply.result_text,
-                resume_payload,
-                posting_payload,
-                resolver=resolver,
-                echo_values=echo_values,
-                echo_allow=echo_allow,
-            )
-        entry = RawAttemptLog(
-            posting_id=posting.posting_id,
-            attempt=number,
-            first_reply=number == 1,
-            prompt_id=prompt.prompt_id,
-            prompt_sha256=prompt.sha256,
-            payload_sha256=digest,
-            model_requested=model_requested,
-            model_served=list(reply.model_served),
-            claude_version=availability.version,
-            argv=list(reply.argv),
-            started_at_utc=reply.started_at_utc,
-            started_at_et=to_eastern(reply.started_at_utc),
-            duration_ms=reply.duration_ms,
-            exit_code=reply.exit_code,
-            stdout_raw=reply.raw_stdout,
-            stderr=reply.stderr,
-            session_id=reply.session_id,
-            is_error=reply.is_error,
-            total_cost_usd=reply.total_cost_usd,
-            backend_error=reply.error,
-            validation=_validation_log(result),
-            seeded=seeded,
-        )
-        ref = rawlog.write(log_dir, entry)
-        attempts.append(JudgeAttempt(number, reply, result, ref))
-        final = result
-        if not isinstance(result, Rejection):
-            break  # VALID, or a failed call (ERROR is never retried)
-
+    call = _Call(
+        text=prompt.render(render_json(resume_payload), render_json(posting_payload)),
+        resume_payload=resume_payload,
+        posting_payload=posting_payload,
+        resolver=resolver,
+        echo_values=sensitive_values(resume),
+        echo_allow=echo_allow_list(resume_payload),
+    )
+    log = _LogContext(
+        posting_id=posting.posting_id,
+        prompt=prompt,
+        payload_sha256=payload_sha256(resume_payload, posting_payload),
+        model_requested=model_requested,
+        claude_version=availability.version,
+        seeded=seeded,
+    )
+    attempts = _attempt_calls(
+        backend, call, log, rawlog, log_dir=log_dir, max_attempts=2 if retry_once else 1
+    )
     diagnostic = JudgmentDiagnostic(
         prompt_id=prompt.prompt_id,
         prompt_sha256=prompt.sha256,
         model_requested=model_requested,
         attempts=[_summary(a) for a in attempts],
     )
-    last_error = attempts[-1].reply.error if attempts else None
-    if isinstance(final, ValidJudgment):
-        reply_model = final.reply
-        judgment = ModelJudgment(
-            status=JudgmentStatus.VALID,
-            label=reply_model.label,
-            summary=reply_model.summary,
-            evidence=list(reply_model.evidence),
-            uncertainties=list(reply_model.uncertainties),
-            diagnostic=diagnostic,
-        )
-    elif isinstance(final, Rejection):
-        judgment = ModelJudgment(
-            status=JudgmentStatus.INVALID_OUTPUT, diagnostic=diagnostic
-        )
-    elif last_error is not None and last_error in PRE_SPAWN_ERRORS:
-        judgment = ModelJudgment(
-            status=JudgmentStatus.UNAVAILABLE,
-            diagnostic=diagnostic.model_copy(
-                update={"unavailable_reason": last_error.value.lower()}
-            ),
-        )
-    else:
-        judgment = ModelJudgment(status=JudgmentStatus.ERROR, diagnostic=diagnostic)
     return JudgeRun(
-        JudgmentOutcome(posting.posting_id, judgment),
+        JudgmentOutcome(posting.posting_id, _final_judgment(attempts, diagnostic)),
         tuple(attempts),
         resume_payload,
         posting_payload,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _Call:
+    """What every attempt sends and validates against (identical across retries)."""
+
+    text: str
+    resume_payload: Mapping[str, Any]
+    posting_payload: Mapping[str, Any]
+    resolver: PathResolver
+    echo_values: tuple[SensitiveValue, ...]
+    echo_allow: tuple[str, ...]
+
+    def validate(self, reply: BackendReply) -> ValidationResult | None:
+        """Validates a successful reply; ``None`` when the call itself failed."""
+        if not reply.ok or reply.result_text is None:
+            return None
+        return validate_reply(
+            reply.result_text,
+            self.resume_payload,
+            self.posting_payload,
+            resolver=self.resolver,
+            echo_values=self.echo_values,
+            echo_allow=self.echo_allow,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _LogContext:
+    """The per-posting facts copied into every raw-reply log file."""
+
+    posting_id: str
+    prompt: PromptContract
+    payload_sha256: str
+    model_requested: str | None
+    claude_version: str | None
+    seeded: bool | None
+
+
+def _attempt_log(
+    ctx: _LogContext, number: int, reply: BackendReply, result: ValidationResult | None
+) -> RawAttemptLog:
+    """Builds the raw-reply log entry for one attempt."""
+    return RawAttemptLog(
+        posting_id=ctx.posting_id,
+        attempt=number,
+        first_reply=number == 1,
+        prompt_id=ctx.prompt.prompt_id,
+        prompt_sha256=ctx.prompt.sha256,
+        payload_sha256=ctx.payload_sha256,
+        model_requested=ctx.model_requested,
+        model_served=list(reply.model_served),
+        claude_version=ctx.claude_version,
+        argv=list(reply.argv),
+        started_at_utc=reply.started_at_utc,
+        started_at_et=to_eastern(reply.started_at_utc),
+        duration_ms=reply.duration_ms,
+        exit_code=reply.exit_code,
+        stdout_raw=reply.raw_stdout,
+        stderr=reply.stderr,
+        session_id=reply.session_id,
+        is_error=reply.is_error,
+        total_cost_usd=reply.total_cost_usd,
+        backend_error=reply.error,
+        validation=_validation_log(result),
+        seeded=ctx.seeded,
+    )
+
+
+def _attempt_calls(
+    backend: ModelBackend,
+    call: _Call,
+    log: _LogContext,
+    rawlog: RawReplyLog,
+    *,
+    log_dir: str,
+    max_attempts: int,
+) -> list[JudgeAttempt]:
+    """Calls the backend, logging each attempt; retries only a rejected reply."""
+    attempts: list[JudgeAttempt] = []
+    for number in range(1, max_attempts + 1):
+        reply = backend.complete(call.text)
+        result = call.validate(reply)
+        ref = rawlog.write(log_dir, _attempt_log(log, number, reply, result))
+        attempts.append(JudgeAttempt(number, reply, result, ref))
+        if not isinstance(result, Rejection):
+            break  # VALID, or a failed call (ERROR is never retried)
+    return attempts
+
+
+def _unavailable_run(
+    prompt: PromptContract,
+    posting: Posting,
+    model_requested: str | None,
+    reason: str,
+) -> JudgeRun:
+    """The run for a backend that reports itself unavailable (no call made)."""
+    judgment = ModelJudgment(
+        status=JudgmentStatus.UNAVAILABLE,
+        diagnostic=JudgmentDiagnostic(
+            prompt_id=prompt.prompt_id,
+            prompt_sha256=prompt.sha256,
+            model_requested=model_requested,
+            unavailable_reason=reason,
+        ),
+    )
+    return JudgeRun(JudgmentOutcome(posting.posting_id, judgment), (), None, None)
+
+
+def _final_judgment(
+    attempts: list[JudgeAttempt], diagnostic: JudgmentDiagnostic
+) -> ModelJudgment:
+    """Maps the last attempt to the stored judgment (VALID, INVALID_OUTPUT, ...)."""
+    last = attempts[-1]
+    final = last.validation
+    if isinstance(final, ValidJudgment):
+        reply = final.reply
+        return ModelJudgment(
+            status=JudgmentStatus.VALID,
+            label=reply.label,
+            summary=reply.summary,
+            evidence=list(reply.evidence),
+            uncertainties=list(reply.uncertainties),
+            diagnostic=diagnostic,
+        )
+    if isinstance(final, Rejection):
+        return ModelJudgment(
+            status=JudgmentStatus.INVALID_OUTPUT, diagnostic=diagnostic
+        )
+    error = last.reply.error
+    if error is not None and error in PRE_SPAWN_ERRORS:
+        return ModelJudgment(
+            status=JudgmentStatus.UNAVAILABLE,
+            diagnostic=diagnostic.model_copy(
+                update={"unavailable_reason": error.value.lower()}
+            ),
+        )
+    return ModelJudgment(status=JudgmentStatus.ERROR, diagnostic=diagnostic)
 
 
 def judge_posting(

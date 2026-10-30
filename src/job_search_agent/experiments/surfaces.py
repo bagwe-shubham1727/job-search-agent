@@ -370,33 +370,21 @@ def cmd_run(
         ExperimentError: If not prepared, already run, the CLI is missing, or (c)
             has no fetcher.
     """
-    if surface not in SURFACES:
-        raise ExperimentError(f"unknown surface: {surface!r}")
-    if not ctx.data_exists(f"{OUT}/prepared.json"):
-        raise ExperimentError("run `jsa exp surfaces prepare` first")
-    prepared = ctx.read_data_json(f"{OUT}/prepared.json")
+    display = _prepared_argv(ctx, surface)
     base = f"{OUT}/{surface}"
-    display = tuple(prepared["surfaces"][surface]["argv"])
     env = child_env(base_env)
     # The child env is an allowlist (PLAN R9): every other parent variable is dropped
     # too, but only the documented R1 names are recorded, never the parent's names.
     removed = sorted(name for name in base_env if name in STRIPPED_ENV)
     if dry_run:
         return {"surface": surface, "argv": list(display), "env_removed": removed}
-    if ctx.data_exists(f"{base}/run.json"):
-        raise ExperimentError(f"surface {surface} has already run; it runs once only")
-    if surface == "c" and fetcher is None:
-        raise ExperimentError("surface c needs the allow-listed fetcher")
-    resolved = which(executable)
-    if resolved is None:
-        raise ExperimentError("claude CLI not found on PATH")
-    argv = (resolved, *display[1:])
+    resolved = _check_runnable(ctx, surface, fetcher, which(executable))
     prompt_text = ctx.reader.read_bytes(ctx.repo_rel(f"{base}/prompt.txt")).decode(
         "utf-8"
     )
     started = ctx.clock.now_utc()
     done = runner.run(
-        argv,
+        (resolved, *display[1:]),
         cwd=resolve_dir(f"{base}/sandbox"),
         env=env,
         stdin=prompt_text,
@@ -406,8 +394,7 @@ def cmd_run(
     record: dict[str, Any] = {
         "surface": surface,
         "argv": list(display),
-        "env_added_or_set": sorted(set(env) - set(base_env))
-        + sorted(k for k in env if k in base_env and env[k] != base_env[k]),
+        "env_added_or_set": _env_changes(env, base_env),
         "env_removed": removed,
         "cwd": ctx.repo_rel(f"{base}/sandbox"),
         "started_at_utc": started.isoformat(),
@@ -420,6 +407,47 @@ def cmd_run(
         record["independent_check"] = _independent_fetch(ctx, fetcher)
     ctx.writer.write_json_atomic(f"{base}/run.json", record)
     return record
+
+
+def _prepared_argv(ctx: ExperimentContext, surface: str) -> tuple[str, ...]:
+    """Returns the prepared display argv of ``surface``.
+
+    Raises:
+        ExperimentError: Unknown surface, or ``prepare`` has not run.
+    """
+    if surface not in SURFACES:
+        raise ExperimentError(f"unknown surface: {surface!r}")
+    if not ctx.data_exists(f"{OUT}/prepared.json"):
+        raise ExperimentError("run `jsa exp surfaces prepare` first")
+    prepared = ctx.read_data_json(f"{OUT}/prepared.json")
+    return tuple(prepared["surfaces"][surface]["argv"])
+
+
+def _check_runnable(
+    ctx: ExperimentContext,
+    surface: str,
+    fetcher: HttpFetcher | None,
+    resolved: str | None,
+) -> str:
+    """Checks the run-once and fetcher gates; returns the resolved executable.
+
+    Raises:
+        ExperimentError: Already run, (c) without a fetcher, or no CLI on PATH.
+    """
+    if ctx.data_exists(f"{OUT}/{surface}/run.json"):
+        raise ExperimentError(f"surface {surface} has already run; it runs once only")
+    if surface == "c" and fetcher is None:
+        raise ExperimentError("surface c needs the allow-listed fetcher")
+    if resolved is None:
+        raise ExperimentError("claude CLI not found on PATH")
+    return resolved
+
+
+def _env_changes(env: Mapping[str, str], base_env: Mapping[str, str]) -> list[str]:
+    """Names of variables the child env adds, then those it sets to a new value."""
+    return sorted(set(env) - set(base_env)) + sorted(
+        k for k in env if k in base_env and env[k] != base_env[k]
+    )
 
 
 def _independent_fetch(ctx: ExperimentContext, fetcher: HttpFetcher) -> dict[str, Any]:
@@ -622,54 +650,14 @@ def cmd_capture(
             continue
         if ctx.data_exists(f"{base}/facts.json"):
             raise ExperimentError(f"surface {surface} already captured")
-        sandbox_path = resolve_dir(f"{base}/sandbox")
-        before = ctx.read_data_json(f"{base}/before.tree.json")
-        after = tree_snapshot(sandbox_path)
-        diff = tree_diff(before, after)
-        transcript = ctx.reader.read_bytes(ctx.repo_rel(f"{base}/transcript.jsonl"))
-        observed = parse_transcript(
-            transcript.decode("utf-8", errors="replace"),
-            sandbox=str(sandbox_path),
+        captured[surface] = _capture_one(
+            ctx,
+            surface,
+            sandbox_path=resolve_dir(f"{base}/sandbox"),
+            granted=prepared["surfaces"][surface]["granted"],
+            repo_unchanged=repo_unchanged,
             home=home,
         )
-        facts: dict[str, Any] = {
-            "surface": surface,
-            "granted": prepared["surfaces"][surface]["granted"],
-            "observed": {
-                "reads": observed["reads"],
-                "writes": observed["writes"],
-                "sends": observed["sends"],
-                "permission_denials": observed["permission_denials"],
-            },
-            "sandbox_changed": any(diff.values()),
-            "repo_unchanged": repo_unchanged,
-            "session_id": observed["session_id"],
-            "model_served": observed["model"],
-            "what_could_go_wrong": None,
-            "what_could_go_wrong_note": "Written by the student in ACTION_SURFACES.md.",
-        }
-        if surface in ("a", "b"):
-            payloads = ctx.read_data_json(f"{base}/payloads.json")
-            text = observed["result_text"]
-            if text is None:
-                facts["reply_validation"] = {"passed": None, "codes": []}
-            else:
-                check = validate_reply(text, payloads["resume"], payloads["posting"])
-                facts["reply_validation"] = {
-                    "passed": not isinstance(check, Rejection),
-                    "codes": (
-                        [c.value for c in check.codes]
-                        if isinstance(check, Rejection)
-                        else []
-                    ),
-                }
-        if surface == "c":
-            facts["independent_check"] = _check_c(ctx, sandbox_path)
-        ctx.writer.write_json_atomic(f"{base}/after.tree.json", after)
-        ctx.writer.write_json_atomic(f"{base}/diff.json", diff)
-        ctx.writer.write_json_atomic(f"{base}/observed.json", observed)
-        ctx.writer.write_json_atomic(f"{base}/facts.json", facts)
-        captured[surface] = facts
     if not captured:
         raise ExperimentError("no surface has run yet; nothing to capture")
     ctx.writer.write_json_atomic(f"{OUT}/repo_after.json", repo_after)
@@ -677,6 +665,64 @@ def cmd_capture(
         f"{OUT}/ACTION_SURFACES.tables.md", render_tables(captured).encode("utf-8")
     )
     return captured
+
+
+def _capture_one(
+    ctx: ExperimentContext,
+    surface: str,
+    *,
+    sandbox_path: Path,
+    granted: Any,  # noqa: ANN401 - JSON from prepared.json, copied as-is
+    repo_unchanged: bool,
+    home: str,
+) -> dict[str, Any]:
+    """Captures one surface that has run and writes its four files; returns facts."""
+    base = f"{OUT}/{surface}"
+    before = ctx.read_data_json(f"{base}/before.tree.json")
+    after = tree_snapshot(sandbox_path)
+    diff = tree_diff(before, after)
+    transcript = ctx.reader.read_bytes(ctx.repo_rel(f"{base}/transcript.jsonl"))
+    observed = parse_transcript(
+        transcript.decode("utf-8", errors="replace"),
+        sandbox=str(sandbox_path),
+        home=home,
+    )
+    facts: dict[str, Any] = {
+        "surface": surface,
+        "granted": granted,
+        "observed": {
+            "reads": observed["reads"],
+            "writes": observed["writes"],
+            "sends": observed["sends"],
+            "permission_denials": observed["permission_denials"],
+        },
+        "sandbox_changed": any(diff.values()),
+        "repo_unchanged": repo_unchanged,
+        "session_id": observed["session_id"],
+        "model_served": observed["model"],
+        "what_could_go_wrong": None,
+        "what_could_go_wrong_note": "Written by the student in ACTION_SURFACES.md.",
+    }
+    if surface in ("a", "b"):
+        payloads = ctx.read_data_json(f"{base}/payloads.json")
+        facts["reply_validation"] = _reply_validation(observed["result_text"], payloads)
+    if surface == "c":
+        facts["independent_check"] = _check_c(ctx, sandbox_path)
+    ctx.writer.write_json_atomic(f"{base}/after.tree.json", after)
+    ctx.writer.write_json_atomic(f"{base}/diff.json", diff)
+    ctx.writer.write_json_atomic(f"{base}/observed.json", observed)
+    ctx.writer.write_json_atomic(f"{base}/facts.json", facts)
+    return facts
+
+
+def _reply_validation(text: str | None, payloads: Mapping[str, Any]) -> dict[str, Any]:
+    """The §8 validator's verdict on a surface's reply (``passed: None`` if none)."""
+    if text is None:
+        return {"passed": None, "codes": []}
+    check = validate_reply(text, payloads["resume"], payloads["posting"])
+    if isinstance(check, Rejection):
+        return {"passed": False, "codes": [c.value for c in check.codes]}
+    return {"passed": True, "codes": []}
 
 
 def _check_c(ctx: ExperimentContext, sandbox: Path) -> dict[str, Any]:
