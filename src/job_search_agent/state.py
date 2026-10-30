@@ -66,6 +66,28 @@ def read_state_bytes(
         return None
 
 
+def read_state_rel(rel: str, read_bytes: Callable[[str], bytes]) -> bytes | None:
+    """Reads the raw state bytes through the write root's path policy.
+
+    The pipeline and ``jsa pending drop`` pass ``OutputRoot.read_bytes``, so a
+    symlinked state file (or parent directory) is refused, not followed.
+
+    Args:
+        rel: The state file relative to the data dir, e.g. ``"live/state.json"``.
+        read_bytes: ``OutputRoot.read_bytes`` (or a double).
+
+    Returns:
+        The exact bytes, or ``None`` when the file does not exist.
+
+    Raises:
+        PathRejected: The path violates the file policy (e.g. a symlink).
+    """
+    try:
+        return read_bytes(rel)
+    except FileNotFoundError:
+        return None
+
+
 def parse_state(data: bytes) -> SeenState:
     """Parses and integrity-checks state bytes.
 

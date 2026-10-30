@@ -15,6 +15,7 @@ from job_search_agent.fsio import (
     ReadPolicy,
     create_output_root,
     is_within,
+    relative_within,
 )
 from job_search_agent.models import ExitCode
 from tests.conftest import REPO_ROOT, RESUME_FIXTURE_REL
@@ -299,3 +300,26 @@ def test_lock_refuses_a_symlink(tmp_root: OutputRoot, tmp_path: Path) -> None:
     with pytest.raises(PathRejected) as info, tmp_root.lock("live/.lock"):
         pass
     assert _reason(info) == "symlink"
+
+
+# --- review fix 4: fsio owns containment ------------------------------------------
+
+
+def test_relative_within_is_the_single_containment_check(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    (root / "data").mkdir(parents=True)
+    (tmp_path / "proj-evil").mkdir()
+    assert relative_within("data/x.json", root) == "data/x.json"
+    assert relative_within(root / "data", root) == "data"
+    assert relative_within(root, root, allow_root=True) == "."
+    for bad in (root, tmp_path / "proj-evil" / "x", "../x", "data/../../x"):
+        with pytest.raises(PathRejected) as info:
+            relative_within(bad, root)
+        assert _reason(info) == "outside_root"
+    (root / "data" / "link").symlink_to(tmp_path / "proj-evil")
+    with pytest.raises(PathRejected):
+        relative_within("data/link/x", root)
+    assert relative_within("data/link/x", root, follow_symlinks=False) == "data/link/x"
+    with pytest.raises(PathRejected) as info:
+        relative_within("data/\x00", root)
+    assert _reason(info) == "nul"

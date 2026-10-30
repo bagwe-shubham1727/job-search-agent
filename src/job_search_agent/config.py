@@ -23,8 +23,8 @@ from pydantic import (
     model_validator,
 )
 
-from job_search_agent.errors import ConfigError
-from job_search_agent.fsio import is_within
+from job_search_agent.errors import ConfigError, PathRejected
+from job_search_agent.fsio import relative_within
 
 DEFAULT_CONFIG_PATH = Path("config/agent.toml")
 """Default config location, relative to the current directory."""
@@ -158,14 +158,17 @@ class AgentConfig(_Section):
     def state_rel(self, *, seeded: bool) -> str:
         """Returns the state file path relative to the data dir (an ``OutputRoot`` rel).
 
+        Computed lexically (symlinks are not followed), so a symlinked state file is
+        later refused by ``OutputRoot`` instead of being resolved here.
+
         Args:
             seeded: Return the seeded state file instead of the live one.
 
         Returns:
             A POSIX path such as ``"live/state.json"``.
         """
-        path = self.seeded_state_path if seeded else self.state_path
-        return path.relative_to(self.data_dir).as_posix()
+        name = self.data.seeded_state_file if seeded else self.data.state_file
+        return relative_within(name, self.data_dir, follow_symlinks=False)
 
     def repo_rel(self, data_rel: str) -> str:
         """Converts a data-dir-relative path to a repo-root-relative one.
@@ -183,15 +186,20 @@ class AgentConfig(_Section):
     def _check_paths(self) -> Self:
         if not self.project_root.is_absolute():
             raise ValueError("project_root must be absolute")
-        root = self.project_root.resolve()
-        if not is_within(self.data_dir, root) or self.data_dir == root:
-            raise ValueError("data.dir must be a directory inside the project root")
+        try:
+            relative_within(self.data_dir, self.project_root)
+        except PathRejected:
+            raise ValueError(
+                "data.dir must be a directory inside the project root"
+            ) from None
         for name, path in (
             ("data.state_file", self.state_path),
             ("data.seeded_state_file", self.seeded_state_path),
         ):
-            if not is_within(path, self.data_dir) or path == self.data_dir:
-                raise ValueError(f"{name} must resolve inside data.dir")
+            try:
+                relative_within(path, self.data_dir)
+            except PathRejected:
+                raise ValueError(f"{name} must resolve inside data.dir") from None
         if self.state_path == self.seeded_state_path:
             raise ValueError("live and seeded state files must differ")
         return self

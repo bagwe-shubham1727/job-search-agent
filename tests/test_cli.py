@@ -417,6 +417,46 @@ def test_pending_drop_fails_fast_while_a_run_holds_the_lock(
     assert jsa(project, *argv) == 0
 
 
+def test_pending_drop_reads_state_through_the_output_root(
+    project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    h = queue_pending(project.parent.parent)
+    reads: list[str] = []
+
+    class Spy(LocalOutputRoot):
+        def read_bytes(self, rel: str) -> bytes:
+            reads.append(rel)
+            return super().read_bytes(rel)
+
+    monkeypatch.setattr(cli, "_output_root", lambda cfg: Spy(cfg.data_dir))
+    argv = ("pending", "drop", str(CONSTRUCTED_ID), "--reason", "withdrawn")
+    assert jsa(project, *argv) == 0
+    assert reads == ["live/state.json"]
+    state = h.data("live/state.json")
+    outside = tmp_path / "outside.json"
+    outside.write_bytes(state.read_bytes())
+    state.unlink()
+    state.symlink_to(outside)
+    monkeypatch.setattr(
+        cli, "_output_root", lambda cfg: create_output_root(cfg.data_dir)
+    )
+    assert jsa(project, *argv) == int(ExitCode.CONFIG_ERROR)
+
+
+def test_resume_gate_reads_through_the_read_policy(tmp_path: Path) -> None:
+    config = make_project(tmp_path)
+    under_src = "src/job_search_agent/kiran.resume.example.json"
+    (tmp_path / under_src).parent.mkdir(parents=True)
+    shutil.copyfile(
+        REPO_ROOT / "persona/kiran-joshi.resume.example.json", tmp_path / under_src
+    )
+    good = load_config(config)
+    assert cli._load_resume(good).source_path == good.resume.path
+    bad = load_config(config, overrides=ConfigOverrides(resume_path=under_src))
+    with pytest.raises(ConfigError):
+        cli._load_resume(bad)
+
+
 # --- rule -----------------------------------------------------------------------
 
 

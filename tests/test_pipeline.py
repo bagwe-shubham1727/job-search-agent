@@ -785,3 +785,48 @@ def test_same_second_run_id_is_a_clear_error_not_path_rejected(h: Harness) -> No
     assert info.value.exit_code is ExitCode.LOCKED
     assert h.data(LIVE_STATE).read_bytes() == before
     assert h.transports[-1].requests == []
+
+
+# --- review fix 4: the state is read through the write root's path policy ----------
+
+
+class _StateOverride(LocalOutputRoot):
+    """Serves ``state_rel`` from memory, proving reads go through ``out``."""
+
+    def __init__(self, root: Path, state_rel: str, data: bytes) -> None:
+        super().__init__(root)
+        self.state_rel = state_rel
+        self.data = data
+        self.reads: list[str] = []
+
+    def read_bytes(self, rel: str) -> bytes:
+        self.reads.append(rel)
+        if rel == self.state_rel:
+            return self.data
+        return super().read_bytes(rel)
+
+
+def test_state_is_read_through_the_output_writer(h: Harness) -> None:
+    live(h)  # a valid state file on disk
+    out = _StateOverride(h.config.data_dir, LIVE_STATE, b"not json")
+    with pytest.raises(StateCorrupt):
+        run_once(h.deps(h.live_source(Reply(body=BODY)), out=out))
+    assert out.reads == [LIVE_STATE]
+
+
+def test_symlinked_state_file_is_refused(h: Harness, tmp_path: Path) -> None:
+    live(h)
+    outside = tmp_path / "outside-state.json"
+    outside.write_bytes(h.data(LIVE_STATE).read_bytes())
+    h.data(LIVE_STATE).unlink()
+    h.data(LIVE_STATE).symlink_to(outside)
+    before = outside.read_bytes()
+    with pytest.raises(PathRejected) as info:
+        run_once(
+            h.deps(
+                h.live_source(Reply(body=added())), out=OutputRoot(h.config.data_dir)
+            )
+        )
+    assert info.value.reason == "symlink"
+    assert outside.read_bytes() == before
+    assert h.transports[-1].requests == []

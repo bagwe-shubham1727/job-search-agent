@@ -72,6 +72,49 @@ def is_within(child: Path, parent: Path) -> bool:
     return child == parent or child.is_relative_to(parent)
 
 
+def relative_within(
+    path: Path | str,
+    root: Path,
+    *,
+    follow_symlinks: bool = True,
+    allow_root: bool = False,
+) -> str:
+    """Returns ``path`` relative to ``root`` (POSIX), or refuses it.
+
+    This is the single containment check of the project: the résumé gate, the CLI's
+    path arguments, ``ReadPolicy`` and the configuration's path validation all call
+    it (review fix 4), so "inside" means the same thing everywhere.
+
+    Args:
+        path: Absolute, or relative to ``root``.
+        root: The containing directory; resolved before comparing.
+        follow_symlinks: Resolve symlinks in ``path`` (``Path.resolve``) before
+            comparing. ``False`` normalises ``..`` lexically instead, for paths that
+            ``OutputRoot`` will then open without following symlinks.
+        allow_root: Accept ``path == root`` (returned as ``"."``).
+
+    Returns:
+        The relative POSIX path, e.g. ``"evidence/handcheck/x.json"``.
+
+    Raises:
+        PathRejected: ``"nul"`` for a NUL byte, ``"outside_root"`` when ``path`` is
+            not inside ``root`` (by components, never by string prefix).
+    """
+    text = os.fspath(path)
+    if "\x00" in text:
+        raise PathRejected("nul", text)
+    base = Path(root).resolve()
+    candidate = Path(text)
+    if not candidate.is_absolute():
+        candidate = base / candidate
+    target = (
+        candidate.resolve() if follow_symlinks else Path(os.path.normpath(candidate))
+    )
+    if not is_within(target, base) or (target == base and not allow_root):
+        raise PathRejected("outside_root", text)
+    return target.relative_to(base).as_posix()
+
+
 def split_rel(rel: str) -> tuple[str, ...]:
     """Validates a write path and returns its components.
 
@@ -481,12 +524,13 @@ class ReadPolicy:
             PathRejected: ``"nul"`` or ``"outside_read_roots"``.
         """
         text = os.fspath(path)
-        if "\x00" in text:
-            raise PathRejected("nul", text)
-        candidate = Path(text)
-        if not candidate.is_absolute():
-            candidate = self._project_root / candidate
-        resolved = candidate.resolve()
+        try:
+            rel = relative_within(text, self._project_root)
+        except PathRejected as exc:
+            if exc.reason == "nul":
+                raise
+            raise PathRejected("outside_read_roots", text) from None
+        resolved = self._project_root / rel
         if any(is_within(resolved, root) for root in self._roots):
             return resolved
         raise PathRejected("outside_read_roots", text)

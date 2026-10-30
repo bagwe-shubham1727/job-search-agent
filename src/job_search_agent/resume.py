@@ -23,7 +23,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Final
 
-from job_search_agent.errors import ConfigError, ResumeRefused
+from job_search_agent.errors import ConfigError, PathRejected, ResumeRefused
+from job_search_agent.fsio import relative_within
 from job_search_agent.models import RefusalCode, SkillEntry, VerifiedResume
 from job_search_agent.rule.skills import SKILL_PATHS, skill_entries_from_resume
 from job_search_agent.strict_json import reject_constant, reject_duplicate_keys
@@ -80,10 +81,10 @@ def _repo_relative(path: Path, project_root: Path) -> tuple[Path, str]:
     """
     root = project_root.resolve()
     absolute = path if path.is_absolute() else root / path
-    resolved = absolute.resolve()
-    if resolved == root or not resolved.is_relative_to(root):
-        raise ConfigError("resume path must resolve inside the project root")
-    return absolute, resolved.relative_to(root).as_posix()
+    try:
+        return absolute, relative_within(absolute, root)
+    except PathRejected:
+        raise ConfigError("resume path must resolve inside the project root") from None
 
 
 def _parse(data: bytes) -> Any:  # noqa: ANN401 - arbitrary JSON
@@ -180,7 +181,8 @@ def load_verified_resume(
         path: Fixture path, absolute or relative to ``project_root``.
         pinned_sha256: The expected lowercase hex digest from configuration or the
             test suite. ``None``, empty or malformed counts as not set.
-        read_bytes: Reads the file (injected so tests can spy on it).
+        read_bytes: Reads the file. The CLI passes ``fsio.ReadPolicy.read_bytes``,
+            so a fixture outside the read roots is refused; tests may spy on it.
         project_root: Repository root used for ``source_path``; defaults to
             ``default_project_root()``.
 
@@ -190,12 +192,16 @@ def load_verified_resume(
     Raises:
         ResumeRefused: With every failing ``RefusalCode``; the message holds codes
             only.
-        ConfigError: If the path is outside the project root or no root is found.
+        ConfigError: If the path is outside the project root, the reader refuses
+            it (``PathRejected``, e.g. outside ``fsio.DEFAULT_READ_ROOTS``), or no
+            root is found.
     """
     root = project_root if project_root is not None else default_project_root()
     absolute, source_path = _repo_relative(path, root)
     try:
         data = read_bytes(absolute)
+    except PathRejected:
+        raise ConfigError("resume path is outside the readable roots") from None
     except OSError:
         raise ResumeRefused({RefusalCode.UNREADABLE}) from None
 

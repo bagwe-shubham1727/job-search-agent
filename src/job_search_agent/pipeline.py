@@ -70,7 +70,7 @@ from job_search_agent.sources import REPLAYED_FROM_NAME, sha256_hex
 from job_search_agent.state import (
     advance,
     parse_state,
-    read_state_bytes,
+    read_state_rel,
     state_to_bytes,
 )
 from job_search_agent.status import explain_status
@@ -323,8 +323,7 @@ class _Pipeline:
         return self._process(run, src, raw_ref, board, resume, fetched_at)
 
     def _load_prior(self) -> tuple[bytes | None, SeenState | None]:
-        path = self.d.out.resolve_for_write(self.state_rel)
-        data = read_state_bytes(path)
+        data = read_state_rel(self.state_rel, self.d.out.read_bytes)
         if data is None:
             return None, None
         state = parse_state(data)

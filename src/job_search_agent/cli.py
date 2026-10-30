@@ -44,11 +44,17 @@ from job_search_agent.config import (
     ModelBackendKind,
     load_config,
 )
-from job_search_agent.errors import AgentError, ConfigError, ResumeRefused, StateCorrupt
+from job_search_agent.errors import (
+    AgentError,
+    ConfigError,
+    PathRejected,
+    ResumeRefused,
+    StateCorrupt,
+)
 from job_search_agent.events import EventLog
 from job_search_agent.evidence_validator import validate_rule_evidence
 from job_search_agent.experiments.cli import register as register_experiments
-from job_search_agent.fsio import ReadPolicy, create_output_root
+from job_search_agent.fsio import ReadPolicy, create_output_root, relative_within
 from job_search_agent.http import build_fetcher_from_settings
 from job_search_agent.judge.judge import build_backend, build_judge, probe_model
 from job_search_agent.judge.prompt import load_prompt
@@ -90,7 +96,7 @@ from job_search_agent.state import (
     drop_pending,
     load_state,
     parse_state,
-    read_state_bytes,
+    read_state_rel,
     state_to_bytes,
 )
 from job_search_agent.sysio import SubprocessGit, SubprocessRunner, minimal_env
@@ -131,12 +137,18 @@ PROBE_FACTS = (
 def _load_resume(cfg: AgentConfig) -> VerifiedResume:
     """Runs the §12 résumé gate on the configured fixture.
 
+    The fixture is read through ``fsio.ReadPolicy``, so a path outside the read
+    roots (``persona/``, ``evidence/``, ...) is refused.
+
     Raises:
         ResumeRefused: Any §12 check failed.
-        ConfigError: The fixture path is outside the project root.
+        ConfigError: The fixture path is outside the project root or the read roots.
     """
     return load_verified_resume(
-        cfg.resume_path, cfg.resume.pinned_sha256, project_root=cfg.project_root
+        cfg.resume_path,
+        cfg.resume.pinned_sha256,
+        read_bytes=ReadPolicy(cfg.project_root).read_bytes,
+        project_root=cfg.project_root,
     )
 
 
@@ -208,12 +220,15 @@ def _judge(
 
 
 def _repo_rel(cfg: AgentConfig, path: Path) -> str:
-    """Returns ``path`` relative to the project root, or raises ``ConfigError``."""
-    resolved = path.resolve()
-    root = cfg.project_root.resolve()
-    if not resolved.is_relative_to(root):
-        raise ConfigError("path must be inside the project root")
-    return resolved.relative_to(root).as_posix()
+    """Returns ``path`` (relative to the cwd) relative to the project root.
+
+    Raises:
+        ConfigError: The path is outside the project root (``fsio.relative_within``).
+    """
+    try:
+        return relative_within(path.absolute(), cfg.project_root, allow_root=True)
+    except PathRejected:
+        raise ConfigError("path must be inside the project root") from None
 
 
 # --- run ------------------------------------------------------------------------
@@ -491,7 +506,7 @@ def cmd_pending_drop(args: argparse.Namespace) -> int:
     rel = cfg.state_rel(seeded=seeded)
     out = _output_root(cfg)
     with out.lock(lock_rel(seeded=seeded)):
-        data = read_state_bytes(cfg.data_dir / rel)
+        data = read_state_rel(rel, out.read_bytes)
         if data is None:
             raise ConfigError("no state file; nothing is pending")
         state = parse_state(data)
