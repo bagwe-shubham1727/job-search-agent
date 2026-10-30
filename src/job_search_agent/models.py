@@ -1,4 +1,4 @@
-"""Shared enums, records and value types (frozen after WS0; changes are additive only).
+"""Shared enums, records and value types (changes are additive only).
 
 Conventions used throughout this module:
 
@@ -21,7 +21,7 @@ Conventions used throughout this module:
   same instant in America/New_York (A22).
 * Models record facts; they do not enforce rule semantics. For example a
   ``RuleVerdict`` with ``MATCH`` and a non-US location can be constructed, because the
-  evidence validator (WS1) must be able to see and reject it. The only invariants
+  evidence validator must be able to see and reject it. The only invariants
   enforced here are structural ones that no correct or deliberately wrong rule needs
   to violate (status/label consistency of a judgment, state-file integrity).
 """
@@ -328,7 +328,7 @@ class FrozenModel(BaseModel):
 class VerifiedResume:
     """Opaque proof that a résumé passed every CONTRACT §12 check.
 
-    Only ``resume.load_verified_resume`` (WS2) may construct one; every other module
+    Only ``resume.load_verified_resume`` may construct one; every other module
     receives it. This is enforced: the constructor requires ``token``, a
     module-private sentinel owned by ``resume`` (``resume._GATE_TOKEN``), so a direct
     ``VerifiedResume(...)`` raises ``TypeError`` (review fix 6). The judge accepts
@@ -515,8 +515,8 @@ class ModelEvidence(FrozenModel):
 class JudgmentReply(FrozenModel):
     """The exact §8 reply schema: these four keys and no others.
 
-    WS4's validator parses the reply text itself (fences, prose, duplicate keys) and
-    then calls ``JudgmentReply.model_validate(obj, strict=True)``; path existence is
+    The judge's validator parses the reply text itself (fences, prose, duplicate keys)
+    and then calls ``JudgmentReply.model_validate(obj, strict=True)``; path existence is
     checked against the payloads afterwards. At least one evidence entry is required
     (A16).
     """

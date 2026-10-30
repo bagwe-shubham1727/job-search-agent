@@ -1,4 +1,4 @@
-"""Subprocess runner, git inspector, event log and sources (WS3 helpers)."""
+"""Subprocess runner, git inspector, event log and sources."""
 
 from __future__ import annotations
 

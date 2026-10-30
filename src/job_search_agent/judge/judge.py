@@ -354,7 +354,7 @@ def _final_judgment(
 
 
 class CliJudge:
-    """``ports.Judge`` adapter used by the pipeline (WS3).
+    """``ports.Judge`` adapter used by the pipeline.
 
     Args:
         backend: The model backend (``ClaudeCliBackend`` or ``UnavailableBackend``).

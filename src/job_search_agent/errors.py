@@ -1,4 +1,4 @@
-"""Exception hierarchy (frozen after WS0; changes are additive only).
+"""Exception hierarchy (changes are additive only).
 
 Every exception the agent raises on purpose derives from ``AgentError`` and carries
 the process exit code the CLI uses when it reaches the top level uncaught. Messages

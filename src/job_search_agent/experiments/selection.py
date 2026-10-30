@@ -62,7 +62,7 @@ HANDCHECK_IDS: tuple[str, ...] = (
 SETS: tuple[str, ...] = ("dev", "heldout")
 
 Evaluate = Callable[[Posting], RuleVerdict]
-"""The deterministic rule for one posting (WS1 ``evaluate`` with the résumé bound)."""
+"""The deterministic rule for one posting (``rule.verdict.evaluate``, résumé bound)."""
 
 
 def classify_stratum(verdict: RuleVerdict) -> str | None:

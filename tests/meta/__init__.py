@@ -1,1 +1,1 @@
-"""Meta-tests about the test suite itself (WS1)."""
+"""Meta-tests about the test suite itself."""

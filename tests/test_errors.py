@@ -1,4 +1,4 @@
-"""Smoke tests for the exception hierarchy (WS0)."""
+"""The exception hierarchy and exit codes."""
 
 from __future__ import annotations
 

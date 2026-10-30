@@ -1,4 +1,4 @@
-"""Smoke tests for config loading (WS0)."""
+"""Config loading, overrides and path checks."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Smoke tests for the shared models (WS0)."""
+"""The shared models."""
 
 from __future__ import annotations
 

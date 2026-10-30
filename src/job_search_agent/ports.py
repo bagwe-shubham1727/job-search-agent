@@ -1,4 +1,4 @@
-"""Injected boundaries (frozen after WS0; changes are additive only).
+"""Injected boundaries (changes are additive only).
 
 The pure core never touches the clock, network, filesystem, subprocesses or git
 directly; it receives these Protocols. Real implementations live in ``clock``,
@@ -45,7 +45,7 @@ class Clock(Protocol):
 class EventSink(Protocol):
     """Receives one structured event per observation (``events.jsonl``, JS2 trace seam).
 
-    Implemented by ``events.EventLog`` (WS3); used by ``http.build_fetcher`` (WS2) and
+    Implemented by ``events.EventLog``; used by ``http.build_fetcher`` and
     the pipeline. Events must never carry résumé values, credentials or absolute paths.
     """
 
@@ -195,7 +195,7 @@ class GitInspector(Protocol):
 
 
 class Judge(Protocol):
-    """Produces Claude's judgment for one posting (WS4 ``judge.judge_posting``).
+    """Produces Claude's judgment for one posting (``judge.judge.CliJudge``).
 
     Implementations must not raise: every failure (no backend, a failed call, an
     invalid reply, a log or work-directory write that fails) is reported through the

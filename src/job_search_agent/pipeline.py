@@ -86,16 +86,16 @@ NOTE_JUDGE_UNAVAILABLE = "judge_unavailable"
 # --- seams --------------------------------------------------------------------
 
 EvaluateFn = Callable[[Posting, VerifiedResume], RuleVerdict]
-"""WS1 ``rule.verdict.evaluate(posting, resume) -> RuleVerdict``."""
+"""``rule.verdict.evaluate(posting, resume) -> RuleVerdict``."""
 
 EvidenceValidatorFn = Callable[
     [RuleVerdict, Mapping[str, Any], Mapping[str, Any]], list[str]
 ]
-"""WS1 ``evidence_validator.validate_rule_evidence(verdict, raw_posting, resume_data)``;
+"""``evidence_validator.validate_rule_evidence(verdict, raw_posting, resume_data)``;
 an empty list means valid."""
 
 ResumeLoader = Callable[[], VerifiedResume]
-"""Runs the WS2 résumé gate; raises ``ResumeRefused`` on any failed check."""
+"""Runs the résumé gate; raises ``ResumeRefused`` on any failed check."""
 
 RepoReader = Callable[[str], bytes]
 """Reads a repo-relative file (through the read policy) for pending retries (A26)."""

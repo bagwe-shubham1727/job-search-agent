@@ -1,4 +1,4 @@
-"""Builders shared by the WS1 tests: the fixture résumé and constructed postings.
+"""Shared test builders: the fixture résumé and constructed postings.
 
 ``fixture_resume`` goes through the real résumé gate (``resume.load_verified_resume``)
 with the independently pinned digest in ``tests.conftest``; a ``VerifiedResume`` cannot

@@ -1,1 +1,1 @@
-"""Tests for the board providers (WS1)."""
+"""Tests for the board providers."""

@@ -1,1 +1,1 @@
-"""Tests for the deterministic rule core (WS1)."""
+"""Tests for the deterministic rule core."""

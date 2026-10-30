@@ -1,4 +1,4 @@
-"""Smoke tests for clocks and run IDs (WS0)."""
+"""Clocks and run IDs."""
 
 from __future__ import annotations
 

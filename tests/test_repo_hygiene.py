@@ -1,17 +1,15 @@
 """Repository hygiene: ignore rules, no real résumé, no absolute paths (CONTRACT §12).
 
-These tests ask git about the committed tree, so they are marked ``subprocess``.
+These tests ask git about the committed tree, so they are marked ``subprocess`` and
+skipped when the project is not a git checkout (e.g. a zip download).
 
-Scope of the absolute-path check: every tracked file under ``data/`` (all generated
-by the agent) and every tracked file under ``docs/`` except the hand-written planning
-notes in ``PROSE_EXCLUSIONS``. Those notes legitimately name the author's checkout
-path in prose (e.g. PLAN.md's "Critical Files" list); they are inputs to the build,
-not artifacts the agent produced.
+The absolute-path check covers every tracked file under ``data/`` and ``docs/``.
 """
 
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 from pathlib import Path, PurePosixPath
 
@@ -19,10 +17,14 @@ import pytest
 
 from tests.conftest import REPO_ROOT, RESUME_FIXTURE_REL
 
-pytestmark = pytest.mark.subprocess
-
-PROSE_EXCLUSIONS = frozenset({"docs/PLAN.md"})
-"""Hand-written planning docs exempt from the absolute-path scan (see module doc)."""
+pytestmark = [
+    pytest.mark.subprocess,
+    pytest.mark.skipif(
+        not (REPO_ROOT / ".git").exists() or shutil.which("git") is None,
+        reason="not a git checkout (or git is not installed): these tests ask git "
+        "about the committed tree",
+    ),
+]
 
 ABSOLUTE_PATH_MARKERS = ("/Users/", "/home/", "/private/var/folders/")
 
@@ -95,8 +97,6 @@ def test_no_real_resume_tracked() -> None:
 def test_no_absolute_paths_in_committed_artifacts() -> None:
     offenders = []
     for path in _tracked("data", "docs"):
-        if path in PROSE_EXCLUSIONS:
-            continue
         file = REPO_ROOT / path
         if file.is_symlink() or not file.is_file():
             continue
@@ -106,11 +106,3 @@ def test_no_absolute_paths_in_committed_artifacts() -> None:
                 line = text[: text.index(marker)].count("\n") + 1
                 offenders.append(f"{path}:{line} contains {marker!r}")
     assert offenders == []
-
-
-def test_prose_exclusions_are_tracked_docs() -> None:
-    """Keeps the exemption list honest: each entry must exist and be under docs/."""
-    tracked = set(_tracked("docs"))
-    for path in PROSE_EXCLUSIONS:
-        assert path in tracked
-        assert path.startswith("docs/")

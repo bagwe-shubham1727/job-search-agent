@@ -122,7 +122,9 @@ def rule_impl(request: pytest.FixtureRequest) -> str:
 @pytest.fixture
 def verified_resume() -> VerifiedResume:
     """The committed fixture, verified through the real résumé gate."""
-    return load_verified_resume(REPO_ROOT / RESUME_FIXTURE_REL, PINNED_RESUME_SHA256)
+    return load_verified_resume(
+        REPO_ROOT / RESUME_FIXTURE_REL, PINNED_RESUME_SHA256, project_root=REPO_ROOT
+    )
 
 
 @pytest.fixture

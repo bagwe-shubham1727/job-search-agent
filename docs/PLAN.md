@@ -93,7 +93,7 @@ src/job_search_agent/
   models.py            shared enums + pydantic models (records, report, state)            [frozen after WS0]
   ports.py             Protocols: Clock, HttpFetcher, RawSource, BoardProvider, ModelBackend, CommandRunner, GitInspector, Judge
   config.py            AgentConfig (tomllib + CLI overrides); validates state path is inside data_dir
-  clock.py             SystemClock, FixedClock; run_id formatting (UTC "2026-10-30T02-11-07Z")
+  clock.py             SystemClock; run_id formatting (UTC "2026-10-30T02-11-07Z")
   jsonpath.py          tiny path grammar: $ ( .key | [int] )*; parse / resolve / format; no wildcards
   text.py              clean_html(): unescape -> strip tags (replace with " ") -> unescape -> collapse whitespace
   rule/title.py        role families derived from $.target.roles via a documented alias table; exclusion markers
@@ -108,7 +108,7 @@ src/job_search_agent/
   fsio.py              OutputRoot (write policy) + ReadPolicy (read roots); atomic writes; JSONL append
   http.py              AllowListTransport, build_fetcher() -> HttpFetcher
   privacy.py           sensitive_values(resume), scan_text(), scan_tree()   (never echoes the matched value)
-  state.py             load_state / save_state / advance (pure) / drop_pending
+  state.py             read_state_rel / parse_state / advance (pure) / drop_pending
   status.py            decide_status() pure precedence table
   sources.py           LiveSource (fetcher) / ReplaySource (saved raw + meta sha256 check)
   events.py            EventLog -> runs/<id>/events.jsonl (JS2 trace seam)
@@ -118,7 +118,7 @@ src/job_search_agent/
   judge/prompt.py      load prompt contract file, render, sha256; section parser for the one-change check
   judge/validator.py   §8 strict validator
   judge/backend.py     ClaudeCliBackend, UnavailableBackend; envelope parsing
-  judge/judge.py       judge_posting(): retry-once orchestration -> JudgmentOutcome
+  judge/judge.py       judge_posting_detailed(): retry-once orchestration -> JudgeRun
   judge/rawlog.py      raw-reply log writer (one file per attempt)
   experiments/cli.py   register(subparsers) for `jsa exp ...`
   experiments/sampling.py  experiments/selection.py  experiments/prompt_experiment.py
@@ -323,7 +323,7 @@ uv run pytest -q ; uv run ruff check . ; uv run ruff format --check . ; uv run m
 - The `verified_resume`, `fixed_clock`, `fake_backend`, `fake_runner`, `fake_git` and `mock_transport(factory)` fixtures, and `tmp_root` (an `OutputRoot` on `tmp_path`).
 - A `--rule-impl={real,wrong_a,wrong_b}` option.
 
-Tests that need the real CLI or network are marked `live` and skipped unless `--live` is passed.
+No test uses the real CLI or network (the `--live` option was removed in the lean audit; real calls are made only by `jsa doctor --probe-model` and the experiment commands).
 
 ### 3.1 Rule core (WS1)
 
@@ -552,7 +552,7 @@ This is mutation-style: the suite has to "kill" each wrong version, and the test
 **`tests/test_repo_hygiene.py`** (subprocess)
 - `test_gitignore_rules` (`git check-ignore` hits `private/x`, `resume.json`, `me.resume.json`; misses `persona/kiran-joshi.resume.example.json`)
 - `test_no_real_resume_tracked`
-- `test_no_absolute_paths_in_committed_artifacts` (no `/Users/` in `data/**` or `docs/**`)
+- `test_no_absolute_paths_in_committed_artifacts` (no home-directory or temp-folder absolute path in `data/**` or `docs/**`)
 
 ### 3.4 Orchestration (WS3)
 
@@ -1059,9 +1059,9 @@ The report's `code_commit` and `code_dirty` fields record exactly which code pro
 - **Prototype counts** (16 MATCH, strata pools) are estimates. The selection code recomputes them and fails loudly if a pool is short.
 
 ### Critical Files for Implementation
-- `/Users/suhas/Suhas/WorkWithMe/INFO-7375-Prompt Engg/Job-Search Agent/CONTRACT.md`
-- `/Users/suhas/Suhas/WorkWithMe/INFO-7375-Prompt Engg/Job-Search Agent/evidence/handcheck/stripe-jobs-2026-10-29T22-41-31Z.json` (plus `.meta.json`)
-- `/Users/suhas/Suhas/WorkWithMe/INFO-7375-Prompt Engg/Job-Search Agent/persona/kiran-joshi.resume.example.json`
-- `/Users/suhas/Suhas/WorkWithMe/INFO-7375-Prompt Engg/Job-Search Agent/.gitignore`
-- `/Users/suhas/Suhas/WorkWithMe/INFO-7375-Prompt Engg/info-7375-prompt-engineering-for-generative-ai/assignments/assignment-js1-the-contract-and-the-watch.md`
+- `CONTRACT.md`
+- `evidence/handcheck/stripe-jobs-2026-10-29T22-41-31Z.json` (plus `.meta.json`)
+- `persona/kiran-joshi.resume.example.json`
+- `.gitignore`
+- `assignments/assignment-js1-the-contract-and-the-watch.md` in the course repository (`info-7375-prompt-engineering-for-generative-ai`, outside this project)
 - Files to create first, which define the shared interfaces: `src/job_search_agent/models.py`, `src/job_search_agent/ports.py`, `src/job_search_agent/rule/location.py`, `src/job_search_agent/pipeline.py`, `src/job_search_agent/judge/validator.py`

@@ -1,4 +1,4 @@
-"""End-to-end seams with every real module wired (no stubs for other workstreams).
+"""End-to-end seams with every real module wired.
 
 Hermetic: the board is an ``httpx.MockTransport`` serving the committed hand-check
 raw bytes (or a CONSTRUCTED variant built in memory), ``git`` and ``claude`` are
