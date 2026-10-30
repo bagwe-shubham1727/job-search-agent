@@ -1,23 +1,18 @@
-"""``jsa`` command-line entry point (PLAN §1.5); WS3 wiring.
+"""``jsa`` command-line entry point (PLAN §1.5).
 
-Every command loads its collaborators lazily, inside the command, through
-``_component``. That keeps this module importable while other workstreams' modules are
-absent, and turns a missing component into an explicit ``ConfigError`` (exit 5)
-instead of an import crash. The seams it expects are, by module:
+Every command builds its collaborators from the real modules, inside the command:
 
-* ``job_search_agent.resume``: ``load_verified_resume(path, pinned_sha256)``
-* ``job_search_agent.fsio``: ``OutputRoot(root)``, ``ReadPolicy(project_root)``
-  with ``.check(path) -> Path``
-* ``job_search_agent.http``: ``build_fetcher(allowed_hosts, *, timeout_s, max_bytes,
-  max_redirects, user_agent, events)``
-* ``job_search_agent.providers.greenhouse``: ``GreenhouseProvider()``
-* ``job_search_agent.rule.verdict``: ``evaluate(posting, resume)``
-* ``job_search_agent.evidence_validator``: ``validate_rule_evidence(verdict, raw,
-  resume_data)``
-* ``job_search_agent.judge.judge``: ``build_judge(config, out, *, clock, runner)``
-* ``job_search_agent.judge.backend``: ``probe_model(config, out, *, clock, runner)``
-* ``job_search_agent.privacy``: ``sensitive_values(resume)``, ``scan_tree(root,
-  values)``
+* ``resume.load_verified_resume``: the §12 résumé gate.
+* ``fsio.OutputRoot`` (the only write root) and ``fsio.ReadPolicy`` (read roots).
+* ``http.build_fetcher_from_settings``: the allow-listed fetcher (live runs only).
+* ``providers.get_provider``: the configured board provider.
+* ``rule.verdict.evaluate`` and ``evidence_validator.validate_rule_evidence``.
+* ``judge.judge.build_judge`` with ``judge.prompt.load_prompt`` (``jsa run``), and
+  ``judge.judge.build_backend`` with ``judge.judge.probe_model``
+  (``jsa doctor --probe-model``). Backend ``none`` builds no judge, so every
+  judgment is an honest ``UNAVAILABLE`` and the run is PARTIAL_FAILURE.
+* ``privacy.sensitive_values`` and ``privacy.scan_tree``: ``jsa audit-privacy``.
+* ``experiments.cli.register``: the ``jsa exp ...`` group.
 
 Exit codes follow PLAN §1.4: 0 BASELINE/SUCCESS_*, 1 PARTIAL_FAILURE, 2 fetch or
 response failure, 3 résumé refused, 4 state corrupt, 5 configuration error. Nothing
@@ -27,18 +22,18 @@ printed here contains résumé values, credentials or absolute paths.
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
 import os
 import shutil
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from types import ModuleType
-from typing import Any, cast
+from typing import Any
 
-from job_search_agent.clock import SystemClock, format_run_id
+import httpx
+
+from job_search_agent.clock import SystemClock
 from job_search_agent.config import (
     DEFAULT_CONFIG_PATH,
     AgentConfig,
@@ -48,6 +43,12 @@ from job_search_agent.config import (
 )
 from job_search_agent.errors import AgentError, ConfigError, ResumeRefused, StateCorrupt
 from job_search_agent.events import EventLog
+from job_search_agent.evidence_validator import validate_rule_evidence
+from job_search_agent.experiments.cli import register as register_experiments
+from job_search_agent.fsio import ReadPolicy, create_output_root
+from job_search_agent.http import build_fetcher_from_settings
+from job_search_agent.judge.judge import build_backend, build_judge, probe_model
+from job_search_agent.judge.prompt import load_prompt
 from job_search_agent.models import (
     ExitCode,
     RunReport,
@@ -67,11 +68,14 @@ from job_search_agent.ports import (
     Clock,
     CommandRunner,
     HttpFetcher,
-    JsonValue,
     Judge,
     RawSource,
 )
+from job_search_agent.privacy import scan_tree, sensitive_values
+from job_search_agent.providers import get_provider
 from job_search_agent.report import render_runs_markdown
+from job_search_agent.resume import load_verified_resume
+from job_search_agent.rule.verdict import evaluate
 from job_search_agent.sources import (
     EvidenceStatus,
     LiveSource,
@@ -93,9 +97,6 @@ Handler = Callable[[argparse.Namespace], int]
 type Subparsers = argparse._SubParsersAction[argparse.ArgumentParser]
 """The object returned by ``add_subparsers``; registrars add commands to it."""
 
-_EXPERIMENTS_MODULE = "job_search_agent.experiments.cli"
-_EXPERIMENTS_ABSENT = frozenset({"job_search_agent.experiments", _EXPERIMENTS_MODULE})
-
 GITIGNORE_REQUIRED = (
     "private/",
     "*.resume.json",
@@ -106,118 +107,100 @@ GITIGNORE_REQUIRED = (
 
 CLAUDE_VERSION_TIMEOUT_S = 15.0
 
+PROBE_FACTS = (
+    "available",
+    "unavailable_reason",
+    "claude_version",
+    "model_requested",
+    "model_served",
+    "session_id",
+    "is_error",
+    "backend_error",
+    "reply_is_ok",
+)
+"""Probe report fields ``jsa doctor --probe-model`` prints (never reply text)."""
 
-# --- lazy components ------------------------------------------------------------
 
-
-def _component(module: str) -> ModuleType:
-    """Imports another workstream's module, or explains that it is missing.
-
-    Args:
-        module: Dotted module name.
-
-    Returns:
-        The module.
-
-    Raises:
-        ConfigError: The module (or its package) is not installed.
-        ModuleNotFoundError: The module exists but one of *its* imports is missing.
-    """
-    try:
-        return importlib.import_module(module)
-    except ModuleNotFoundError as exc:
-        name = exc.name or ""
-        if name and (module == name or module.startswith(name + ".")):
-            raise ConfigError(f"component not installed: {module}") from exc
-        raise
+# --- components -----------------------------------------------------------------
 
 
 def _load_resume(cfg: AgentConfig) -> VerifiedResume:
-    """Runs the WS2 résumé gate on the configured fixture.
+    """Runs the §12 résumé gate on the configured fixture.
 
     Raises:
         ResumeRefused: Any §12 check failed.
-        ConfigError: The résumé module is not installed.
+        ConfigError: The fixture path is outside the project root.
     """
-    resume = _component("job_search_agent.resume")
-    loaded = resume.load_verified_resume(cfg.resume_path, cfg.resume.pinned_sha256)
-    if not isinstance(loaded, VerifiedResume):
-        raise ConfigError("resume gate returned an unexpected type")
-    return loaded
+    return load_verified_resume(
+        cfg.resume_path, cfg.resume.pinned_sha256, project_root=cfg.project_root
+    )
 
 
 def _output_root(cfg: AgentConfig) -> OutputWriter:
-    """Builds WS2's ``fsio.OutputRoot`` on the data directory (created if absent)."""
-    fsio = _component("job_search_agent.fsio")
-    cfg.data_dir.mkdir(parents=True, exist_ok=True)
-    return cast(OutputWriter, fsio.OutputRoot(cfg.data_dir))
+    """Builds ``fsio.OutputRoot`` on the data directory (created if absent)."""
+    return create_output_root(cfg.data_dir)
 
 
 def _reader(cfg: AgentConfig) -> Callable[[Path], bytes]:
-    """Returns a file reader guarded by WS2's ``fsio.ReadPolicy``."""
-    fsio = _component("job_search_agent.fsio")
-    policy = fsio.ReadPolicy(cfg.project_root)
-
-    def read(path: Path) -> bytes:
-        checked: Path = policy.check(path)
-        return checked.read_bytes()
-
-    return read
+    """Returns a file reader guarded by ``fsio.ReadPolicy``."""
+    return ReadPolicy(cfg.project_root).read_bytes
 
 
 def _provider(cfg: AgentConfig) -> BoardProvider:
-    """Builds the configured board provider (only ``greenhouse`` exists)."""
-    if cfg.board.provider != "greenhouse":
-        raise ConfigError(f"unknown provider: {cfg.board.provider}")
-    module = _component("job_search_agent.providers.greenhouse")
-    return cast(BoardProvider, module.GreenhouseProvider())
+    """Builds the configured board provider from the registry."""
+    return get_provider(cfg.board.provider)
 
 
 def _rule_functions() -> tuple[EvaluateFn, EvidenceValidatorFn]:
-    """Returns WS1's ``evaluate`` and ``validate_rule_evidence``."""
-    verdict = _component("job_search_agent.rule.verdict")
-    validator = _component("job_search_agent.evidence_validator")
-    return (
-        cast(EvaluateFn, verdict.evaluate),
-        cast(EvidenceValidatorFn, validator.validate_rule_evidence),
-    )
+    """Returns the rule's ``evaluate`` and the §7 ``validate_rule_evidence``."""
+    return evaluate, validate_rule_evidence
 
 
-def _fetcher(cfg: AgentConfig, events: EventLog) -> HttpFetcher:
-    """Builds WS2's allow-listed fetcher."""
-    http = _component("job_search_agent.http")
-    return cast(
-        HttpFetcher,
-        http.build_fetcher(
-            cfg.http.allowed_hosts,
-            timeout_s=cfg.http.timeout_s,
-            max_bytes=cfg.http.max_bytes,
-            max_redirects=cfg.http.max_redirects,
-            user_agent=cfg.http.user_agent,
-            events=events,
-        ),
-    )
+def _fetcher(
+    cfg: AgentConfig, events: EventLog, transport: httpx.BaseTransport | None
+) -> HttpFetcher:
+    """Builds the allow-listed fetcher (``transport`` replaces the TLS transport)."""
+    return build_fetcher_from_settings(cfg.http, inner=transport, events=events)
 
 
 def _judge(
-    cfg: AgentConfig, out: OutputWriter, clock: Clock, runner: CommandRunner
+    cfg: AgentConfig,
+    out: OutputWriter,
+    clock: Clock,
+    runner: CommandRunner,
+    *,
+    seeded: bool,
+    read: Callable[[Path], bytes],
 ) -> tuple[Judge | None, str]:
-    """Builds WS4's judge, or explains why judgments will be ``UNAVAILABLE``.
+    """Builds the Claude judge, or explains why judgments will be ``UNAVAILABLE``.
+
+    Args:
+        cfg: The configuration; ``[model]`` selects the backend and prompt.
+        out: The data-root writer (raw-reply logs, per-call empty directories).
+        clock: The clock.
+        runner: Runs ``claude``.
+        seeded: Written into every raw-reply log (``True`` for replay runs).
+        read: Reads the prompt file through the read policy.
 
     Returns:
         ``(judge, unavailable_reason)``; ``judge`` is ``None`` for backend ``none``
-        or when the judge module is not installed (never a silent fallback: the
-        records say UNAVAILABLE with this reason and the run is PARTIAL_FAILURE).
+        (never a silent fallback: the records say UNAVAILABLE with this reason and
+        the run is PARTIAL_FAILURE).
     """
     if cfg.model.backend == "none":
         return None, "backend_none"
-    try:
-        module = _component("job_search_agent.judge.judge")
-    except ConfigError:
-        print("jsa run: judge not installed; judgments UNAVAILABLE", file=sys.stderr)
-        return None, "judge_module_missing"
-    judge = module.build_judge(cfg, out, clock=clock, runner=runner)
-    return cast(Judge, judge), "backend_none"
+    prompt = load_prompt(cfg.project_root, cfg.model.prompt_version, read_bytes=read)
+    judge = build_judge(
+        cfg.model,
+        prompt,
+        runner=runner,
+        writer=out,
+        make_empty_dir=out.make_empty_dir,
+        clock=clock,
+        repo_rel=cfg.repo_rel,
+        seeded=seeded,
+    )
+    return judge, "backend_none"
 
 
 def _repo_rel(cfg: AgentConfig, path: Path) -> str:
@@ -232,27 +215,37 @@ def _repo_rel(cfg: AgentConfig, path: Path) -> str:
 # --- run ------------------------------------------------------------------------
 
 
-def build_run_deps(cfg: AgentConfig, replay: Path | None) -> RunDeps:
+def build_run_deps(
+    cfg: AgentConfig,
+    replay: Path | None,
+    *,
+    clock: Clock | None = None,
+    runner: CommandRunner | None = None,
+    transport: httpx.BaseTransport | None = None,
+) -> RunDeps:
     """Wires the real collaborators for ``jsa run``.
 
     Args:
         cfg: The configuration (with any CLI overrides applied).
         replay: A saved raw response to replay (seeded run), or ``None`` for live.
+        clock: The clock; defaults to ``SystemClock``.
+        runner: Runs ``git`` and ``claude``; defaults to ``SubprocessRunner``.
+        transport: The fetcher's inner transport; defaults to TLS-verifying HTTPS.
 
     Returns:
         The run dependencies.
 
     Raises:
-        ConfigError: A component is missing or the replay path is outside the
+        ConfigError: The provider is unknown or the replay path is outside the
             project.
     """
-    clock = SystemClock()
-    runner = SubprocessRunner()
+    clock = clock or SystemClock()
+    runner = runner or SubprocessRunner()
     events = EventLog(clock)
     out = _output_root(cfg)
     read = _reader(cfg)
     provider = _provider(cfg)
-    evaluate, validate = _rule_functions()
+    evaluate_fn, validate = _rule_functions()
     source: RawSource
     if replay is not None:
         source = ReplaySource(
@@ -262,15 +255,17 @@ def build_run_deps(cfg: AgentConfig, replay: Path | None) -> RunDeps:
         )
     else:
         url = provider.jobs_url(cfg.board.token)
-        source = LiveSource(_fetcher(cfg, events), url)
-    judge, reason = _judge(cfg, out, clock, runner)
+        source = LiveSource(_fetcher(cfg, events, transport), url)
+    judge, reason = _judge(
+        cfg, out, clock, runner, seeded=replay is not None, read=read
+    )
     return RunDeps(
         config=cfg,
         clock=clock,
         source=source,
         provider=provider,
         load_resume=lambda: _load_resume(cfg),
-        evaluate=evaluate,
+        evaluate=evaluate_fn,
         validate_evidence=validate,
         judge=judge,
         out=out,
@@ -420,20 +415,30 @@ def doctor_checks(cfg: AgentConfig, runner: CommandRunner) -> list[Check]:
 
 
 def _probe_model(cfg: AgentConfig) -> int:
-    """Runs WS4's one-call model probe and records it under ``data/doctor/``."""
-    backend = _component("job_search_agent.judge.backend")
+    """Makes the one-call model probe and records it under ``data/doctor/``.
+
+    Returns:
+        ``OK``; a probe that could not call the model or got an unexpected reply is
+        printed as ``WARN`` with the recorded facts.
+    """
     clock = SystemClock()
     out = _output_root(cfg)
-    facts = cast(
-        Mapping[str, JsonValue],
-        backend.probe_model(cfg, out, clock=clock, runner=SubprocessRunner()),
+    backend = build_backend(
+        cfg.model,
+        runner=SubprocessRunner(),
+        make_empty_dir=out.make_empty_dir,
+        clock=clock,
     )
-    rel = f"doctor/{format_run_id(clock.now_utc())}.json"
-    out.write_json_atomic(rel, dict(facts), sort_keys=False)
-    print(f"[OK] probe-model: facts recorded in {cfg.repo_rel(rel)}")
-    for key in ("model_requested", "model_served", "session_id", "is_error"):
-        if key in facts:
-            print(f"  {key}: {json.dumps(facts[key])}")
+    result = probe_model(
+        backend, model_requested=cfg.model.model_id, clock=clock, writer=out
+    )
+    report = result.report
+    level = "OK" if report.reply_is_ok and report.backend_error is None else "WARN"
+    where = cfg.repo_rel(result.data_rel) if result.data_rel else "nowhere"
+    print(f"[{level}] probe-model: facts recorded in {where}")
+    facts = report.model_dump(mode="json")
+    for key in PROBE_FACTS:
+        print(f"  {key}: {json.dumps(facts[key])}")
     return int(ExitCode.OK)
 
 
@@ -544,16 +549,13 @@ def cmd_verify_evidence(args: argparse.Namespace) -> int:
 
 
 def cmd_audit_privacy(args: argparse.Namespace) -> int:
-    """``jsa audit-privacy [PATH]``: scan outputs with WS2's privacy scanner."""
+    """``jsa audit-privacy [PATH]``: scan outputs with the privacy scanner."""
     cfg = _config(args)
     target_rel = _repo_rel(cfg, args.path)
-    privacy = _component("job_search_agent.privacy")
-    values = privacy.sensitive_values(_load_resume(cfg))
-    findings: Sequence[object] = privacy.scan_tree(
-        cfg.project_root / target_rel, values
-    )
+    values = sensitive_values(_load_resume(cfg))
+    findings = scan_tree(cfg.project_root / target_rel, values)
     for finding in findings:
-        print(f"[FINDING] {finding}")
+        print(f"[FINDING] {finding.describe()}")
     print(f"audit-privacy {target_rel}: {len(findings)} finding(s)")
     return int(ExitCode.OK if not findings else ExitCode.PARTIAL_FAILURE)
 
@@ -662,23 +664,8 @@ _REGISTRY: tuple[Callable[[Subparsers], None], ...] = (
     _add_verify_evidence,
     _add_audit_privacy,
     _add_docs,
+    register_experiments,
 )
-
-
-def _register_experiments(sub: Subparsers) -> None:
-    """Adds ``jsa exp ...`` if the experiments package is installed.
-
-    Raises:
-        ModuleNotFoundError: If the experiments module exists but one of *its*
-            imports is missing (a real bug, not an absent workstream).
-    """
-    try:
-        module = importlib.import_module(_EXPERIMENTS_MODULE)
-    except ModuleNotFoundError as exc:
-        if exc.name in _EXPERIMENTS_ABSENT:
-            return
-        raise
-    module.register(sub)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -703,7 +690,6 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
     for register in _REGISTRY:
         register(sub)
-    _register_experiments(sub)
     return parser
 
 

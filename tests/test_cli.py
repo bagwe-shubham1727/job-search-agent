@@ -1,14 +1,14 @@
 """``jsa`` CLI: parser, exit codes, offline commands (PLAN §1.4, §1.5, §3.4).
 
-Components owned by other workstreams are replaced through the CLI's lazy seams
-(``_load_resume``, ``_output_root``, ``_reader``, ``_provider``, ``_rule_functions``,
-``build_run_deps``) with WS3-local doubles.
+Components owned by other workstreams are replaced through the CLI's component
+builders (``_load_resume``, ``_output_root``, ``_reader``, ``_provider``,
+``_rule_functions``, ``build_run_deps``) with WS3-local doubles; the real wiring is
+exercised in ``tests/test_integration.py``.
 """
 
 from __future__ import annotations
 
 import argparse
-import importlib
 import json
 import shutil
 from collections.abc import Callable
@@ -30,6 +30,7 @@ from job_search_agent.models import (
     exit_code_for_status,
 )
 from job_search_agent.pipeline import RunDeps
+from job_search_agent.privacy import Finding, FindingKind
 from job_search_agent.sources import LiveSource, ReplaySource
 from job_search_agent.state import parse_state
 from tests.conftest import HANDCHECK_META_REL, HANDCHECK_RAW_REL, REPO_ROOT
@@ -99,49 +100,6 @@ def test_run_help_lists_replay_and_backend(capsys: pytest.CaptureFixture[str]) -
         cli.main(["run", "--help"])
     out = capsys.readouterr().out
     assert "--replay" in out and "--model-backend" in out
-
-
-def test_missing_experiments_module_does_not_break_cli(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def missing(name: str) -> None:
-        raise ModuleNotFoundError(f"No module named {name!r}", name=name)
-
-    monkeypatch.setattr(importlib, "import_module", missing)
-    assert cli.build_parser().parse_args(["doctor"]).command == "doctor"
-
-
-def test_broken_experiments_import_is_not_hidden(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def broken(_name: str) -> None:
-        raise ModuleNotFoundError("No module named 'numpy'", name="numpy")
-
-    monkeypatch.setattr(importlib, "import_module", broken)
-    with pytest.raises(ModuleNotFoundError):
-        cli.build_parser()
-
-
-def test_missing_component_is_config_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def missing(name: str) -> None:
-        raise ModuleNotFoundError(f"No module named {name!r}", name=name)
-
-    monkeypatch.setattr(importlib, "import_module", missing)
-    with pytest.raises(ConfigError, match="component not installed"):
-        cli._component("job_search_agent.providers.greenhouse")
-
-
-def test_component_with_broken_inner_import_is_not_hidden(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def broken(_name: str) -> None:
-        raise ModuleNotFoundError("No module named 'lxml'", name="lxml")
-
-    monkeypatch.setattr(importlib, "import_module", broken)
-    with pytest.raises(ModuleNotFoundError):
-        cli._component("job_search_agent.providers.greenhouse")
 
 
 # --- run and exit codes ---------------------------------------------------------
@@ -273,7 +231,12 @@ def test_model_backend_none_override_reaches_config(
 def test_judge_backend_none_is_honest_unavailable(project: Path) -> None:
     cfg = load_config(project, overrides=ConfigOverrides(model_backend="none"))
     judge, reason = cli._judge(
-        cfg, LocalOutputRoot(cfg.data_dir), SystemClock(), FakeRunner()
+        cfg,
+        LocalOutputRoot(cfg.data_dir),
+        SystemClock(),
+        FakeRunner(),
+        seeded=False,
+        read=Path.read_bytes,
     )
     assert judge is None and reason == "backend_none"
 
@@ -382,13 +345,13 @@ def test_doctor_resume_refusal_exit_3(
     assert "DIGEST_MISMATCH" in capsys.readouterr().out
 
 
-def test_doctor_missing_resume_module_is_config_error(
+def test_doctor_resume_config_error_is_exit_5(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def missing(cfg: AgentConfig) -> VerifiedResume:
-        raise ConfigError("component not installed: job_search_agent.resume")
+    def outside(cfg: AgentConfig) -> VerifiedResume:
+        raise ConfigError("résumé path is outside the project root")
 
-    monkeypatch.setattr(cli, "_load_resume", missing)
+    monkeypatch.setattr(cli, "_load_resume", outside)
     monkeypatch.setattr(shutil, "which", lambda name: None)
     assert jsa(project, "doctor") == int(ExitCode.CONFIG_ERROR)
 
@@ -494,24 +457,15 @@ def test_audit_privacy_delegates_to_privacy_module(
 ) -> None:
     calls: dict[str, Any] = {}
 
-    class FakePrivacy:
-        @staticmethod
-        def sensitive_values(resume: VerifiedResume) -> list[str]:
-            return ["x"]
+    def scan_tree(root: Path, values: object) -> list[Finding]:
+        calls["root"] = root
+        return [Finding(FindingKind.RESUME_VALUE, "live/x.json", 1, 2, "$.p.email")]
 
-        @staticmethod
-        def scan_tree(root: Path, values: list[str]) -> list[str]:
-            calls["root"] = root
-            return ["data/live/x.json: email"]
-
-    real = cli._component
-    monkeypatch.setattr(
-        cli,
-        "_component",
-        lambda name: FakePrivacy if name == "job_search_agent.privacy" else real(name),
-    )
+    monkeypatch.setattr(cli, "sensitive_values", lambda resume: ())
+    monkeypatch.setattr(cli, "scan_tree", scan_tree)
     assert jsa(project, "audit-privacy", str(project.parent.parent / "data")) == 1
     out = capsys.readouterr().out
+    assert "[FINDING] live/x.json:1:2 RESUME_VALUE $.p.email" in out
     assert "1 finding(s)" in out and "audit-privacy data:" in out
     assert calls["root"] == project.parent.parent / "data"
 
