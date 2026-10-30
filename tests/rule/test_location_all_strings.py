@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import pytest
@@ -10,29 +9,26 @@ import pytest
 from job_search_agent.models import LocationLabel
 from job_search_agent.rule import location as impl
 from job_search_agent.rule.location import classify_location, location_signals
-from tests.conftest import REPO_ROOT, RawHandcheck
+from tests.conftest import RawHandcheck
 from tests.oracles.location_oracle import contract_lists, oracle_label
-from tests.tools.regen_location_snapshot import (
-    COMMAND,
-    SNAPSHOT_REL,
-    distinct_locations,
-    snapshot_entries,
-)
 
 NO_SIGNAL = {"N/A", "na", "LOCATION", "AMER", "Remote", "Remote "}
+
+
+def distinct_locations(raw: dict[str, Any]) -> list[str]:
+    """Returns every distinct ``$.jobs[*].location.name`` string, sorted."""
+    names = {
+        job["location"]["name"]
+        for job in raw["jobs"]
+        if isinstance(job.get("location"), dict)
+        and isinstance(job["location"].get("name"), str)
+    }
+    return sorted(names)
 
 
 @pytest.fixture(scope="module")
 def names(raw_handcheck: RawHandcheck) -> list[str]:
     return distinct_locations(raw_handcheck.data)
-
-
-@pytest.fixture(scope="module")
-def snapshot() -> dict[str, Any]:
-    document: dict[str, Any] = json.loads(
-        (REPO_ROOT / SNAPSHOT_REL).read_text(encoding="utf-8")
-    )
-    return document
 
 
 def test_raw_has_294_distinct_location_strings(names: list[str]) -> None:
@@ -51,21 +47,6 @@ def test_both_signal_strings_are_not_established(names: list[str]) -> None:
     assert "Toronto, CA" in both
     for name in both:
         assert classify_location(name, "").label is LocationLabel.NOT_ESTABLISHED
-
-
-def test_matches_reviewed_snapshot(
-    names: list[str], snapshot: dict[str, Any], raw_handcheck: RawHandcheck
-) -> None:
-    """Regenerate with ``uv run python -m tests.tools.regen_location_snapshot``."""
-    assert snapshot["generated_by"] == COMMAND
-    assert snapshot["source"]["path"] == raw_handcheck.rel_path
-    assert snapshot["source"]["sha256"] == raw_handcheck.meta["sha256"]
-    assert "reviewed_by_student" in snapshot
-    assert snapshot["reviewed_by_student"] is None or isinstance(
-        snapshot["reviewed_by_student"], str
-    )
-    assert snapshot["count"] == len(names)
-    assert snapshot["entries"] == snapshot_entries(names)
 
 
 def test_differential_against_token_oracle(names: list[str]) -> None:

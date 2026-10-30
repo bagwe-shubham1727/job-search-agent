@@ -418,7 +418,7 @@ Tests that need the real CLI or network are marked `live` and skipped unless `--
 - `test_raw_has_294_distinct_location_strings`
 - `test_only_documented_strings_have_no_signal` (the set equals the 6 strings above)
 - `test_both_signal_strings_are_not_established` (25)
-- `test_matches_reviewed_snapshot`: `tests/data/location_labels.2026-10-29.json`, generated once by `uv run python -m tests.tools.regen_location_snapshot`. Its header records the generating commit and a `reviewed_by_student: null` field the student fills.
+- ~~`test_matches_reviewed_snapshot`~~: removed in the lean audit. A snapshot regenerated from the code only restated the code; the oracle test below parses CONTRACT §6.4 independently.
 - `test_differential_against_token_oracle`: an independent, deliberately different tokenising implementation in `tests/oracles/location_oracle.py`, compared on all 294 strings.
 
 **`tests/rule/test_verdict.py`**
