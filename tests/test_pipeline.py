@@ -11,15 +11,24 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from job_search_agent.errors import PathRejected, ResumeRefused, StateCorrupt
+from job_search_agent.errors import (
+    PathRejected,
+    ResumeRefused,
+    RunIdTaken,
+    RunLocked,
+    StateCorrupt,
+)
+from job_search_agent.fsio import OutputRoot
 from job_search_agent.judge.payload import PayloadError
 from job_search_agent.models import (
     BackendErrorKind,
+    ExitCode,
     FetchErrorKind,
     JudgmentOutcome,
     JudgmentStatus,
@@ -35,8 +44,8 @@ from job_search_agent.pipeline import run_once
 from job_search_agent.report import render_runs_markdown
 from job_search_agent.sources import LiveSource
 from job_search_agent.state import parse_state
-from tests.conftest import HANDCHECK_RAW_REL
-from tests.fakes import FakeBackend, Reply
+from tests.conftest import FIXED_START, HANDCHECK_RAW_REL
+from tests.fakes import FakeBackend, FixedClock, Reply
 from tests.ws3_doubles import (
     CONSTRUCTED_ID,
     JOBS_URL,
@@ -738,3 +747,41 @@ def test_raising_judge_gives_error_judgment_and_partial_failure(
     assert len(crashed) == 1
     assert crashed[0]["posting_id"] == NEW_ID
     assert crashed[0]["reason"] == code
+
+
+# --- review fix 3: one run at a time per data mode --------------------------------
+
+
+def test_run_fails_fast_while_another_process_holds_the_lock(h: Harness) -> None:
+    live(h)
+    before = h.data(LIVE_STATE).read_bytes()
+    runs_before = sorted(p.name for p in h.data("live/runs").iterdir())
+    out = OutputRoot(h.config.data_dir)
+    with out.lock("live/.lock"), pytest.raises(RunLocked) as info:
+        run_once(h.deps(h.live_source(Reply(body=added())), out=out))
+    assert info.value.exit_code is ExitCode.LOCKED
+    assert h.data(LIVE_STATE).read_bytes() == before
+    assert sorted(p.name for p in h.data("live/runs").iterdir()) == runs_before
+    assert h.transports[-1].requests == []
+    assert h.judge.judged == []
+    report = run_once(h.deps(h.live_source(Reply(body=BODY)), out=out))
+    assert report.status is RunStatus.SUCCESS_NO_NEW  # the lock was released
+
+
+def test_same_second_run_id_is_a_clear_error_not_path_rejected(h: Harness) -> None:
+    clock = FixedClock(FIXED_START, step=timedelta(0))
+    out = OutputRoot(h.config.data_dir)
+    first = dataclasses.replace(
+        h.deps(h.live_source(Reply(body=BODY)), out=out), clock=clock
+    )
+    run_once(first)
+    before = h.data(LIVE_STATE).read_bytes()
+    second = dataclasses.replace(
+        h.deps(h.live_source(Reply(body=BODY)), out=out), clock=clock
+    )
+    with pytest.raises(RunIdTaken) as info:
+        run_once(second)
+    assert not isinstance(info.value, PathRejected)
+    assert info.value.exit_code is ExitCode.LOCKED
+    assert h.data(LIVE_STATE).read_bytes() == before
+    assert h.transports[-1].requests == []

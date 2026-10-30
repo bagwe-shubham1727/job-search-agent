@@ -26,3 +26,6 @@ build/
 
 # Per-call empty working directories for the claude CLI (PLAN §4, A32)
 data/tmp/
+
+# Per-mode run locks (review fix 3); empty, never evidence
+data/*/.lock

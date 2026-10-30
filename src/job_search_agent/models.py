@@ -202,7 +202,14 @@ class BackendErrorKind(StrEnum):
 
 
 class ExitCode(IntEnum):
-    """Process exit codes of ``jsa`` (PLAN §1.4)."""
+    """Process exit codes of ``jsa`` (PLAN §1.4).
+
+    ``6`` is taken by the experiments CLI (``EXPERIMENT_REFUSED_EXIT``, a refused
+    ordering gate). ``LOCKED`` (7) means another ``jsa`` process holds the data lock
+    for the same mode (``data/<live|seeded>/.lock``), or a run with the same
+    one-second run ID already exists; nothing was fetched or written, so the command
+    can simply be retried.
+    """
 
     OK = 0
     PARTIAL_FAILURE = 1
@@ -210,6 +217,7 @@ class ExitCode(IntEnum):
     RESUME_REFUSED = 3
     STATE_CORRUPT = 4
     CONFIG_ERROR = 5
+    LOCKED = 7
 
 
 _STATUS_EXIT_CODES: Mapping[RunStatus, ExitCode] = {

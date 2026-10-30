@@ -59,6 +59,8 @@ def _ignored(path: str) -> bool:
         "me.resume.json",
         "persona/me.resume.json",
         "data/tmp/judge-1/x",
+        "data/live/.lock",
+        "data/seeded/.lock",
         ".env",
     ],
 )

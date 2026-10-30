@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -39,6 +40,7 @@ from job_search_agent.errors import (
     ConfigError,
     InvalidResponse,
     PathRejected,
+    RunIdTaken,
     StateCorrupt,
 )
 from job_search_agent.events import EventLog
@@ -75,6 +77,8 @@ from job_search_agent.status import explain_status
 
 LIVE_DIR = "live"
 SEEDED_DIR = "seeded"
+LOCK_NAME = ".lock"
+"""Lock file inside ``data/<live|seeded>/``; held for the whole of a run."""
 
 NOTE_SEEDED = "seeded_replay_no_network"
 NOTE_PENDING_SOURCE_UNAVAILABLE = "pending_source_unavailable"
@@ -126,6 +130,30 @@ class OutputWriter(Protocol):
     def make_empty_dir(self, rel: str) -> Path:
         """Creates a new, empty directory (and parents)."""
         ...
+
+    def read_bytes(self, rel: str) -> bytes:
+        """Reads a file without following symlinks; FileNotFoundError if absent."""
+        ...
+
+    def exists(self, rel: str) -> bool:
+        """Returns True if ``rel`` exists (a symlink is refused, not followed)."""
+        ...
+
+    def lock(self, rel: str) -> AbstractContextManager[None]:
+        """Holds an exclusive non-blocking lock on ``rel``; raises ``RunLocked``."""
+        ...
+
+
+def lock_rel(*, seeded: bool) -> str:
+    """Returns the data-root-relative lock file for a mode, e.g. ``"live/.lock"``.
+
+    Args:
+        seeded: The seeded (replay) mode instead of live.
+
+    Returns:
+        The lock path; ``jsa run`` and ``jsa pending drop`` hold it while they work.
+    """
+    return f"{SEEDED_DIR if seeded else LIVE_DIR}/{LOCK_NAME}"
 
 
 @dataclass(frozen=True)
@@ -236,10 +264,16 @@ class _Pipeline:
 
     def run(self) -> RunReport:
         resume = self.d.load_resume()
+        with self.d.out.lock(lock_rel(seeded=self.d.seeded)):
+            return self._run_locked(resume)
+
+    def _run_locked(self, resume: VerifiedResume) -> RunReport:
         prior_bytes, prior = self._load_prior()
         started = self.d.clock.now_utc()
         run_id = format_run_id(started, seeded=self.d.seeded)
         run_rel = f"{self.base}/runs/{run_id}"
+        if self.d.out.exists(run_rel):
+            raise RunIdTaken(run_id)
         commit, dirty = _git_facts(self.d.git)
         run = _Run(run_id, run_rel, started, prior, commit, dirty)
         if self.d.seeded:
@@ -700,6 +734,10 @@ def run_once(deps: RunDeps) -> RunReport:
 
     Raises:
         ResumeRefused: The résumé gate refused the fixture; nothing was fetched.
+        RunLocked: Another process holds ``data/<live|seeded>/.lock``; nothing was
+            fetched or written.
+        RunIdTaken: A run with the same one-second run ID exists; nothing was
+            fetched or written.
         StateCorrupt: The state file exists but is invalid; nothing was fetched and
             the file is untouched.
         ConfigError: The source kind contradicts ``deps.seeded``.
@@ -727,5 +765,6 @@ __all__ = [
     "ResumeLoader",
     "RunDeps",
     "load_report",
+    "lock_rel",
     "run_once",
 ]

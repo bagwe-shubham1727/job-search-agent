@@ -21,6 +21,7 @@ from job_search_agent import cli
 from job_search_agent.clock import SystemClock
 from job_search_agent.config import AgentConfig, ConfigOverrides, load_config
 from job_search_agent.errors import ConfigError, ResumeRefused
+from job_search_agent.fsio import OutputRoot, create_output_root
 from job_search_agent.models import (
     CompletedCommand,
     ExitCode,
@@ -398,6 +399,22 @@ def test_pending_list_and_drop(
     capsys.readouterr()
     assert jsa(project, "pending", "list", "--data", "seeded") == 0
     assert "absent" in capsys.readouterr().out
+
+
+def test_pending_drop_fails_fast_while_a_run_holds_the_lock(
+    project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    h = queue_pending(project.parent.parent)
+    monkeypatch.setattr(
+        cli, "_output_root", lambda cfg: create_output_root(cfg.data_dir)
+    )
+    before = h.data("live/state.json").read_bytes()
+    argv = ("pending", "drop", str(CONSTRUCTED_ID), "--reason", "withdrawn")
+    with OutputRoot(h.config.data_dir).lock("live/.lock"):
+        assert jsa(project, *argv) == int(ExitCode.LOCKED) == 7
+    assert "lock" in capsys.readouterr().err
+    assert h.data("live/state.json").read_bytes() == before
+    assert jsa(project, *argv) == 0
 
 
 # --- rule -----------------------------------------------------------------------

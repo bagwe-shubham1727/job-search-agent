@@ -141,3 +141,48 @@ class InvalidResponse(AgentError):  # noqa: N818 - name fixed by PLAN §1.1
         self.detail = detail
         suffix = f" ({detail})" if detail else ""
         super().__init__(f"invalid response: {code}{suffix}")
+
+
+class RunLocked(AgentError):  # noqa: N818 - parallel to the other policy errors
+    """Another ``jsa`` process holds the data lock for this mode (live or seeded).
+
+    ``jsa run`` and ``jsa pending drop`` take an exclusive, non-blocking ``flock`` on
+    ``data/<live|seeded>/.lock`` for their whole duration, so two of them can never
+    read and rewrite the same state file at once. Nothing has been fetched or
+    written when this is raised.
+
+    Args:
+        rel: The lock's data-root-relative path, e.g. ``"live/.lock"``.
+
+    Attributes:
+        rel: The lock path.
+    """
+
+    exit_code: ClassVar[ExitCode] = ExitCode.LOCKED
+
+    def __init__(self, rel: str) -> None:
+        self.rel = rel
+        super().__init__(f"another jsa process holds the lock {rel}; retry later")
+
+
+class RunIdTaken(AgentError):  # noqa: N818 - parallel to the other policy errors
+    """A run folder with this run ID already exists (two runs in the same second).
+
+    Run IDs have one-second resolution (``RUN_ID_PATTERN``) and are stored in the
+    state file, so they are never suffixed; the second run stops before fetching.
+
+    Args:
+        run_id: The run ID that is already taken.
+
+    Attributes:
+        run_id: The run ID.
+    """
+
+    exit_code: ClassVar[ExitCode] = ExitCode.LOCKED
+
+    def __init__(self, run_id: str) -> None:
+        self.run_id = run_id
+        super().__init__(
+            f"run id {run_id} is already used (a run started in the same second); "
+            "retry in a second"
+        )

@@ -15,7 +15,10 @@ Every command builds its collaborators from the real modules, inside the command
 * ``experiments.cli.register``: the ``jsa exp ...`` group.
 
 Exit codes follow PLAN §1.4: 0 BASELINE/SUCCESS_*, 1 PARTIAL_FAILURE, 2 fetch or
-response failure, 3 résumé refused, 4 state corrupt, 5 configuration error. Nothing
+response failure, 3 résumé refused, 4 state corrupt, 5 configuration error; 6 is the
+experiments CLI's refused gate; 7 (``LOCKED``) means another ``jsa run`` or ``jsa
+pending drop`` holds ``data/<live|seeded>/.lock`` (or a run already used this
+second's run ID), so nothing was done and the command can be retried. Nothing
 printed here contains résumé values, credentials or absolute paths.
 """
 
@@ -61,6 +64,7 @@ from job_search_agent.pipeline import (
     OutputWriter,
     RunDeps,
     load_report,
+    lock_rel,
     run_once,
 )
 from job_search_agent.ports import (
@@ -483,23 +487,26 @@ def cmd_pending_list(args: argparse.Namespace) -> int:
 def cmd_pending_drop(args: argparse.Namespace) -> int:
     """``jsa pending drop <posting_id> --reason TEXT [--data live|seeded]``."""
     cfg = _config(args)
-    rel = cfg.state_rel(seeded=args.data == "seeded")
-    data = read_state_bytes(cfg.data_dir / rel)
-    if data is None:
-        raise ConfigError("no state file; nothing is pending")
-    state = parse_state(data)
-    try:
-        dropped = drop_pending(
-            state,
-            args.posting_id,
-            reason=args.reason,
-            dropped_at=SystemClock().now_utc(),
-        )
-    except KeyError as exc:
-        raise ConfigError("posting is not pending") from exc
-    except ValueError as exc:
-        raise ConfigError("a non-empty --reason is required") from exc
-    _output_root(cfg).write_bytes_atomic(rel, state_to_bytes(dropped))
+    seeded = args.data == "seeded"
+    rel = cfg.state_rel(seeded=seeded)
+    out = _output_root(cfg)
+    with out.lock(lock_rel(seeded=seeded)):
+        data = read_state_bytes(cfg.data_dir / rel)
+        if data is None:
+            raise ConfigError("no state file; nothing is pending")
+        state = parse_state(data)
+        try:
+            dropped = drop_pending(
+                state,
+                args.posting_id,
+                reason=args.reason,
+                dropped_at=SystemClock().now_utc(),
+            )
+        except KeyError as exc:
+            raise ConfigError("posting is not pending") from exc
+        except ValueError as exc:
+            raise ConfigError("a non-empty --reason is required") from exc
+        out.write_bytes_atomic(rel, state_to_bytes(dropped))
     print(f"dropped {args.posting_id} from pending in {rel} (decision recorded)")
     return int(ExitCode.OK)
 

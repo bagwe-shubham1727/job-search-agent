@@ -14,6 +14,10 @@ enforces that for every write the agent makes:
   moved over the target with ``os.replace``, then the directory is fsynced. A
   failure at any step leaves the previous file intact and removes the temporary.
 
+``OutputRoot.lock`` takes an exclusive, non-blocking ``flock`` on a lock file (the
+pipeline uses ``data/<live|seeded>/.lock``). Lock files are empty, git-ignored
+(``data/*/.lock``) and are not evidence: nothing reads their contents.
+
 ``ReadPolicy`` limits reads to the project's input and output roots (persona/,
 evidence/, data/, prompts/, config/, experiments/) after resolving symlinks.
 
@@ -23,6 +27,7 @@ Every rejection raises ``PathRejected`` whose message holds a reason code only.
 from __future__ import annotations
 
 import contextlib
+import fcntl
 import json
 import os
 import secrets
@@ -33,7 +38,7 @@ from typing import Any, Final
 
 from pydantic import BaseModel
 
-from job_search_agent.errors import PathRejected
+from job_search_agent.errors import PathRejected, RunLocked
 
 DEFAULT_READ_ROOTS: Final = (
     "persona",
@@ -378,6 +383,40 @@ class OutputRoot:
                     return handle.read()
             finally:
                 os.close(fd)
+
+    @contextlib.contextmanager
+    def lock(self, rel: str) -> Iterator[None]:
+        """Holds an exclusive, non-blocking ``flock`` on ``rel`` for the ``with`` body.
+
+        The lock file is created (empty, owner-only) if missing and left in place;
+        the lock is released when the file descriptor is closed, including when the
+        process dies, so a crash never leaves a stale lock.
+
+        Args:
+            rel: Path relative to the root, e.g. ``"live/.lock"``.
+
+        Yields:
+            Nothing; the lock is held until the block exits.
+
+        Raises:
+            RunLocked: Another open file description holds the lock.
+            PathRejected: On any policy violation (a symlinked lock file included).
+        """
+        parts = split_rel(rel)
+        with self._parent_fd(parts, create=True) as dir_fd:
+            flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW
+            try:
+                fd = os.open(parts[-1], flags, _FILE_MODE, dir_fd=dir_fd)
+            except IsADirectoryError as exc:
+                raise PathRejected("is_dir", rel) from exc
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise RunLocked(rel) from exc
+            yield
+        finally:
+            os.close(fd)
 
     def exists(self, rel: str) -> bool:
         """Returns True if ``rel`` exists (as anything but a symlink).

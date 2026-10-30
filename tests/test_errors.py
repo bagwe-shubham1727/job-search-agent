@@ -11,6 +11,8 @@ from job_search_agent.errors import (
     InvalidResponse,
     PathRejected,
     ResumeRefused,
+    RunIdTaken,
+    RunLocked,
     StateCorrupt,
 )
 from job_search_agent.models import ExitCode, RefusalCode
@@ -47,6 +49,8 @@ def test_host_not_allowed_message_omits_url() -> None:
         (StateCorrupt("not_json"), ExitCode.STATE_CORRUPT),
         (InvalidResponse("not_json"), ExitCode.FETCH_OR_RESPONSE),
         (HostNotAllowed("h", "scheme"), ExitCode.FETCH_OR_RESPONSE),
+        (RunLocked("live/.lock"), ExitCode.LOCKED),
+        (RunIdTaken("2026-10-30T02-11-07Z"), ExitCode.LOCKED),
     ],
 )
 def test_exit_codes(exc: AgentError, code: ExitCode) -> None:

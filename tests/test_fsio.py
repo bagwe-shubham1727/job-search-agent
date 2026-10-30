@@ -9,13 +9,14 @@ from pathlib import Path
 import pytest
 
 from job_search_agent.config import ConfigOverrides, load_config
-from job_search_agent.errors import ConfigError, PathRejected
+from job_search_agent.errors import ConfigError, PathRejected, RunLocked
 from job_search_agent.fsio import (
     OutputRoot,
     ReadPolicy,
     create_output_root,
     is_within,
 )
+from job_search_agent.models import ExitCode
 from tests.conftest import REPO_ROOT, RESUME_FIXTURE_REL
 
 
@@ -272,3 +273,29 @@ def test_state_path_outside_data_dir_refused(tmp_path: Path) -> None:
     with pytest.raises(PathRejected):
         OutputRoot(data).write_json_atomic("../state.json", {})
     assert not (tmp_path / "state.json").exists()
+
+
+# --- review fix 3: the per-mode run lock ----------------------------------------
+
+
+def test_lock_is_exclusive_per_file_and_released(tmp_root: OutputRoot) -> None:
+    with tmp_root.lock("live/.lock"):
+        with pytest.raises(RunLocked) as info, tmp_root.lock("live/.lock"):
+            pass
+        assert info.value.exit_code is ExitCode.LOCKED
+        assert "/" not in str(info.value).replace("live/.lock", "")
+        with tmp_root.lock("seeded/.lock"):
+            pass  # the seeded lock is independent
+    with tmp_root.lock("live/.lock"):
+        pass  # released on exit
+    assert (tmp_root.root / "live" / ".lock").is_file()
+
+
+def test_lock_refuses_a_symlink(tmp_root: OutputRoot, tmp_path: Path) -> None:
+    (tmp_root.root / "live").mkdir()
+    target = tmp_path / "elsewhere"
+    target.write_bytes(b"")
+    (tmp_root.root / "live" / ".lock").symlink_to(target)
+    with pytest.raises(PathRejected) as info, tmp_root.lock("live/.lock"):
+        pass
+    assert _reason(info) == "symlink"

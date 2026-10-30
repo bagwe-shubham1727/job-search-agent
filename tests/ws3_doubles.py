@@ -15,12 +15,13 @@ implementations and are never imported by ``src``:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import re
 import shutil
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path, PurePosixPath
@@ -53,7 +54,7 @@ from job_search_agent.models import (
     VerdictLabel,
     VerifiedResume,
 )
-from job_search_agent.pipeline import RunDeps
+from job_search_agent.pipeline import OutputWriter, RunDeps
 from job_search_agent.ports import RawSource
 from job_search_agent.sources import LiveSource, ReplaySource
 from tests.conftest import (
@@ -172,6 +173,17 @@ class LocalOutputRoot:
         path = self.resolve_for_write(rel)
         path.mkdir(parents=True, exist_ok=False)
         return path
+
+    def read_bytes(self, rel: str) -> bytes:
+        return self.resolve_for_write(rel).read_bytes()
+
+    def exists(self, rel: str) -> bool:
+        return self.resolve_for_write(rel).exists()
+
+    @contextlib.contextmanager
+    def lock(self, rel: str) -> Iterator[None]:
+        self.resolve_for_write(rel)
+        yield
 
 
 # --- provider -------------------------------------------------------------------
@@ -586,7 +598,7 @@ class Harness:
         validate: Callable[
             [RuleVerdict, Mapping[str, Any], Mapping[str, Any]], list[str]
         ] = stub_validate,
-        out: LocalOutputRoot | None = None,
+        out: OutputWriter | None = None,
     ) -> RunDeps:
         log = EventLog()
         self.events.append(log)
