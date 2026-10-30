@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from job_search_agent import resume as resume_module
 from job_search_agent.models import (
     AbandonedJudgment,
     AttemptSummary,
@@ -411,21 +412,31 @@ def test_report_new_count_must_match_ids() -> None:
 # --- port values ------------------------------------------------------------
 
 
-def test_verified_resume_is_opaque_and_copies() -> None:
-    data: dict[str, Any] = {
-        "personal": {"email": "kiran.joshi@example.com"},
-        "skills": {"x": ["Java"]},
-    }
-    resume = VerifiedResume(data, sha256=SHA, source_path="persona/x.json")
-    assert "example.com" not in repr(resume)
-    copy_ = resume.to_dict()
-    copy_["skills"]["x"].append("Go")
-    data["skills"]["x"].append("Rust")
-    assert resume.to_dict()["skills"]["x"] == ["Java"]
+def test_verified_resume_is_opaque_and_copies(
+    verified_resume: VerifiedResume,
+) -> None:
+    assert "example.com" not in repr(verified_resume)
+    copy_ = verified_resume.to_dict()
+    first = copy_["skills"]["languages"][0]
+    copy_["skills"]["languages"].insert(0, "Go-not-in-fixture")
+    assert verified_resume.to_dict()["skills"]["languages"][0] == first
+
+
+def test_verified_resume_cannot_be_constructed_directly() -> None:
+    data: dict[str, Any] = {"skills": {"x": ["Java"]}}
+    with pytest.raises(TypeError, match="load_verified_resume"):
+        VerifiedResume(data, sha256=SHA, source_path="persona/x.json")
+    with pytest.raises(TypeError, match="load_verified_resume"):
+        VerifiedResume(data, sha256=SHA, source_path="persona/x.json", token=object())
+
+
+def test_verified_resume_still_validates_digest_and_path() -> None:
+    token = resume_module._GATE_TOKEN  # noqa: SLF001 - the gate's own token
+    data: dict[str, Any] = {"skills": {"x": ["Java"]}}
     with pytest.raises(ValueError, match="sha256"):
-        VerifiedResume(data, sha256="ABC", source_path="persona/x.json")
+        VerifiedResume(data, sha256="ABC", source_path="persona/x.json", token=token)
     with pytest.raises(ValueError, match="relative"):
-        VerifiedResume(data, sha256=SHA, source_path="/abs/x.json")
+        VerifiedResume(data, sha256=SHA, source_path="/abs/x.json", token=token)
 
 
 def _posting(**overrides: Any) -> Posting:

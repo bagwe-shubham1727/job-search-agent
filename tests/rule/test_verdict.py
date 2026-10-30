@@ -111,7 +111,13 @@ def test_rule_ignores_personal_fields() -> None:
     item = posting(content="Java, Python and React")
     baseline = evaluate(item, RESUME)
     data = fixture_resume_data()
-    data["personal"] = {"name": "Someone Else", "email": "x@example.com"}
+    # The gate only admits the approved persona name; every other personal value
+    # (and every section the rule does not read) is changed or emptied.
+    data["personal"] = {
+        "name": data["personal"]["name"],
+        "email": "someone.else@example.com",
+        "phone": "555-0199",
+    }
     data["education"] = []
     data["experience"] = []
     data["projects"] = []

@@ -312,17 +312,22 @@ class VerifiedResume:
     """Opaque proof that a résumé passed every CONTRACT §12 check.
 
     Only ``resume.load_verified_resume`` (WS2) may construct one; every other module
-    receives it. The judge accepts nothing else (it also checks the type at runtime),
-    so unverified résumé content cannot reach a model. The parsed JSON is held
-    privately and handed out only as a deep copy, and ``repr`` shows no résumé
-    content, so a stray log line or traceback cannot print it (§12).
+    receives it. This is enforced: the constructor requires ``token``, a
+    module-private sentinel owned by ``resume`` (``resume._GATE_TOKEN``), so a direct
+    ``VerifiedResume(...)`` raises ``TypeError`` (review fix 6). The judge accepts
+    nothing else (it also checks the type at runtime), so unverified résumé content
+    cannot reach a model. The parsed JSON is held privately and handed out only as a
+    deep copy, and ``repr`` shows no résumé content, so a stray log line or traceback
+    cannot print it (§12).
 
     Args:
         data: The parsed résumé JSON object. It is deep-copied.
         sha256: The verified digest of the exact fixture bytes.
         source_path: Repo-relative path of the fixture that was verified.
+        token: The résumé gate's private sentinel.
 
     Raises:
+        TypeError: If ``token`` is not the résumé gate's sentinel.
         ValueError: If ``sha256`` is not a lowercase hex digest or ``source_path`` is
             not a repo-relative path.
     """
@@ -330,8 +335,20 @@ class VerifiedResume:
     __slots__ = ("_data", "_sha256", "_source_path")
 
     def __init__(
-        self, data: Mapping[str, Any], *, sha256: str, source_path: str
+        self,
+        data: Mapping[str, Any],
+        *,
+        sha256: str,
+        source_path: str,
+        token: object = None,
     ) -> None:
+        # Imported here: ``resume`` imports this module, and owns the sentinel.
+        from job_search_agent.resume import _GATE_TOKEN  # noqa: PLC0415
+
+        if token is not _GATE_TOKEN:
+            raise TypeError(
+                "a VerifiedResume is built only by resume.load_verified_resume"
+            )
         if not re.fullmatch(r"[0-9a-f]{64}", sha256):
             raise ValueError("sha256 must be a lowercase hex digest")
         self._source_path: str = _check_repo_path(source_path)

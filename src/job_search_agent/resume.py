@@ -1,6 +1,7 @@
 """The résumé gate (CONTRACT §12) and read-only views of a verified résumé (§4).
 
-``load_verified_resume`` is the only code that constructs a ``VerifiedResume``. It
+``load_verified_resume`` is the only code that constructs a ``VerifiedResume`` (the
+constructor demands this module's private ``_GATE_TOKEN``). It
 reads the fixture bytes exactly once, checks their SHA-256 against a digest pinned in
 configuration (never one computed from the same file at runtime), then parses those
 same bytes and runs every content check. All failing checks are collected into one
@@ -53,6 +54,10 @@ REQUIRED_SKILL_KEYS: Final = (*COUNTED_SKILL_KEYS, "familiar_with_not_shipped")
 """All eight skill arrays that must be present (A13); the last is never counted."""
 
 _SHA256_HEX = re.compile(r"[0-9a-f]{64}")
+
+_GATE_TOKEN: Final = object()
+"""Module-private sentinel: ``VerifiedResume`` refuses to be built without it, so only
+``load_verified_resume`` can mint one (review fix 6)."""
 _MARKERS: Final = ("pyproject.toml", "config/agent.toml")
 
 
@@ -222,7 +227,9 @@ def load_verified_resume(
 
     if codes:
         raise ResumeRefused(codes)
-    return VerifiedResume(doc, sha256=digest, source_path=source_path)
+    return VerifiedResume(
+        doc, sha256=digest, source_path=source_path, token=_GATE_TOKEN
+    )
 
 
 def _require_verified(resume: object) -> VerifiedResume:

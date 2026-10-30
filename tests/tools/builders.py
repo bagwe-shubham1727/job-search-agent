@@ -1,20 +1,24 @@
 """Builders shared by the WS1 tests: the fixture résumé and constructed postings.
 
-``fixture_resume`` checks the committed fixture's bytes against the independently
-pinned digest in ``tests.conftest`` before wrapping them, so the rule tests do not
-depend on WS2's résumé gate (``resume.load_verified_resume``) being merged. It is a
-test-only stand-in; production code obtains a ``VerifiedResume`` only from that gate.
+``fixture_resume`` goes through the real résumé gate (``resume.load_verified_resume``)
+with the independently pinned digest in ``tests.conftest``; a ``VerifiedResume`` cannot
+be built any other way (review fix 6). A mutated copy is written to a temporary
+project and verified against the digest of the mutated bytes, so it must still pass
+every §12 content check.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import tempfile
 from functools import cache
+from pathlib import Path
 from typing import Any
 
 from job_search_agent.models import ParsedBoard, Posting, VerifiedResume
 from job_search_agent.providers.greenhouse import GreenhouseProvider
+from job_search_agent.resume import load_verified_resume
 from tests.conftest import (
     HANDCHECK_RAW_REL,
     PINNED_RESUME_SHA256,
@@ -38,21 +42,36 @@ def fixture_resume_data() -> dict[str, Any]:
     return data
 
 
+@cache
+def _committed_resume() -> VerifiedResume:
+    _fixture_bytes()
+    return load_verified_resume(
+        REPO_ROOT / RESUME_FIXTURE_REL, PINNED_RESUME_SHA256, project_root=REPO_ROOT
+    )
+
+
 def fixture_resume(data: dict[str, Any] | None = None) -> VerifiedResume:
-    """Wraps the fixture (or a mutated copy of it) as a ``VerifiedResume``.
+    """Verifies the fixture (or a mutated copy of it) through the real gate.
 
     Args:
         data: A mutated copy of the fixture for tests that change one field; the
-            committed fixture when omitted.
+            committed fixture when omitted. The copy is pinned to its own digest
+            and must pass the §12 content checks.
 
     Returns:
-        The wrapped résumé.
+        The verified résumé.
     """
-    return VerifiedResume(
-        fixture_resume_data() if data is None else data,
-        sha256=PINNED_RESUME_SHA256,
-        source_path=RESUME_FIXTURE_REL,
-    )
+    if data is None:
+        return _committed_resume()
+    body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        path = root / RESUME_FIXTURE_REL
+        path.parent.mkdir(parents=True)
+        path.write_bytes(body)
+        return load_verified_resume(
+            path, hashlib.sha256(body).hexdigest(), project_root=root
+        )
 
 
 def job(**fields: Any) -> dict[str, Any]:

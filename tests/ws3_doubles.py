@@ -16,7 +16,6 @@ implementations and are never imported by ``src``:
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import json
 import os
 import re
@@ -56,6 +55,7 @@ from job_search_agent.models import (
 )
 from job_search_agent.pipeline import OutputWriter, RunDeps
 from job_search_agent.ports import RawSource
+from job_search_agent.resume import load_verified_resume
 from job_search_agent.sources import LiveSource, ReplaySource
 from tests.conftest import (
     FIXED_START,
@@ -92,11 +92,9 @@ VALID_REPLY = json.dumps(
 
 
 def fixture_resume() -> VerifiedResume:
-    """Builds a ``VerifiedResume`` of the committed fixture without the WS2 gate."""
-    data = (REPO_ROOT / RESUME_FIXTURE_REL).read_bytes()
-    assert hashlib.sha256(data).hexdigest() == PINNED_RESUME_SHA256
-    return VerifiedResume(
-        json.loads(data), sha256=PINNED_RESUME_SHA256, source_path=RESUME_FIXTURE_REL
+    """The committed fixture, verified through the real résumé gate (pinned digest)."""
+    return load_verified_resume(
+        REPO_ROOT / RESUME_FIXTURE_REL, PINNED_RESUME_SHA256, project_root=REPO_ROOT
     )
 
 

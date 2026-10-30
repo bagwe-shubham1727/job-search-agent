@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from job_search_agent.models import Posting, VerifiedResume
+from job_search_agent.resume import load_verified_resume
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 RESUME_REL = "persona/kiran-joshi.resume.example.json"
@@ -43,8 +44,8 @@ def simple_clean(raw: str) -> str:
 
 
 def make_resume() -> VerifiedResume:
-    data = json.loads((REPO_ROOT / RESUME_REL).read_text(encoding="utf-8"))
-    return VerifiedResume(data, sha256=PINNED, source_path=RESUME_REL)
+    """The committed fixture, verified through the real résumé gate (pinned digest)."""
+    return load_verified_resume(REPO_ROOT / RESUME_REL, PINNED, project_root=REPO_ROOT)
 
 
 def posting_from_raw(job: Mapping[str, Any], index: int) -> Posting:
