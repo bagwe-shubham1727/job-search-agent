@@ -360,6 +360,7 @@ def test_score_accepts_a_crashed_cell_and_marks_it_incomplete(
         pe.cmd_run(repo.ctx, **kwargs)
     results = repo.data("experiments/prompt/results/v2-heldout/results.json")
     assert results["complete"] is False and len(results["calls"]) == 4
+    assert repo.data("experiments/prompt/results/v2-heldout/STARTED.json")
     with pytest.raises(ExperimentError, match="already run"):
         pe.cmd_run(repo.ctx, **kwargs)  # the run-once rule still holds
     doc = pe.cmd_score(repo.ctx)

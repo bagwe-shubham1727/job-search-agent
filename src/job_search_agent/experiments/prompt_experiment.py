@@ -92,6 +92,11 @@ def cell_dir(prompt: str, set_name: str) -> str:
     return f"{OUT}/results/{prompt}-{set_name}"
 
 
+def _started(prompt: str, set_name: str) -> str:
+    """The run-once marker PROCEDURE.md names, written before the first call."""
+    return f"{cell_dir(prompt, set_name)}/STARTED.json"
+
+
 def _results(prompt: str, set_name: str) -> str:
     return f"{cell_dir(prompt, set_name)}/results.json"
 
@@ -126,8 +131,8 @@ def cmd_select(
 
     Args:
         ctx: Shared dependencies.
-        postings: Every posting of the hand-check raw file (parsed by WS1).
-        evaluate: The rule (WS1 ``evaluate`` with the verified résumé bound).
+        postings: Every posting of the hand-check raw file (parsed by the provider).
+        evaluate: The rule (``rule.verdict.evaluate`` with the verified résumé bound).
 
     Returns:
         The written ``selection.json`` content.
@@ -315,7 +320,7 @@ def cmd_run(
     if prompt_version not in PROMPTS or set_name not in SETS:
         raise ExperimentError("prompt must be v1 or v2 and set must be dev or heldout")
     _verify_seal(ctx)
-    if ctx.data_exists(_results(prompt_version, set_name)):
+    if ctx.data_exists(_started(prompt_version, set_name)):
         raise ExperimentError(
             f"{prompt_version}/{set_name} has already run; each cell runs once only"
         )
@@ -341,6 +346,7 @@ def cmd_run(
         "code_commit": ctx.git.head(),
         "code_dirty": ctx.git.is_dirty(),
     }
+    ctx.writer.write_json_atomic(_started(prompt_version, set_name), started)
 
     def call(pid: str) -> Callable[[], dict[str, Any]]:
         log_dir = f"{cell_dir(prompt_version, set_name)}/calls/{pid}"
