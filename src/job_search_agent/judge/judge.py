@@ -260,6 +260,7 @@ def judge_posting(
     retry_once: bool = True,
     clean: Cleaner | None = None,
     resolver: PathResolver = _jsonpath.resolve,
+    seeded: bool | None = None,
 ) -> JudgmentOutcome:
     """Judges one posting (see ``judge_posting_detailed``) and returns the outcome.
 
@@ -274,6 +275,7 @@ def judge_posting(
         retry_once: Retry once after a validation failure.
         clean: HTML cleaner for the posting payload.
         resolver: Path resolver for the validator.
+        seeded: Copied into each raw log file when not ``None`` (replay runs).
 
     Returns:
         The judgment outcome.
@@ -289,6 +291,7 @@ def judge_posting(
         retry_once=retry_once,
         clean=clean,
         resolver=resolver,
+        seeded=seeded,
     ).outcome
 
 
@@ -302,6 +305,8 @@ class CliJudge:
         model_requested: The pinned model ID, recorded per call.
         clean: HTML cleaner (defaults to WS1's ``text.clean_html``).
         resolver: Validator path resolver.
+        seeded: Written into every raw log file when not ``None`` (``True`` for
+            replay runs, so the seeded label reaches every file).
     """
 
     def __init__(
@@ -313,8 +318,10 @@ class CliJudge:
         model_requested: str | None,
         clean: Cleaner | None = None,
         resolver: PathResolver = _jsonpath.resolve,
+        seeded: bool | None = None,
     ) -> None:
         self._backend = backend
+        self._seeded = seeded
         self._prompt = prompt
         self._rawlog = rawlog
         self._model_requested = model_requested
@@ -345,6 +352,7 @@ class CliJudge:
             retry_once=True,
             clean=self._clean,
             resolver=self._resolver,
+            seeded=self._seeded,
         )
 
 
@@ -389,6 +397,7 @@ def build_judge(
     clock: Clock,
     repo_rel: Callable[[str], str],
     clean: Cleaner | None = None,
+    seeded: bool | None = None,
 ) -> CliJudge:
     """Wires a ``CliJudge`` from configuration (convenience for the pipeline CLI).
 
@@ -401,6 +410,7 @@ def build_judge(
         clock: The clock.
         repo_rel: ``AgentConfig.repo_rel``.
         clean: HTML cleaner (defaults to WS1's).
+        seeded: Passed to ``CliJudge`` (``True`` for replay runs).
 
     Returns:
         The judge.
@@ -414,6 +424,7 @@ def build_judge(
         RawReplyLog(writer, repo_rel=repo_rel),
         model_requested=settings.model_id if settings.backend != "none" else None,
         clean=clean,
+        seeded=seeded,
     )
 
 

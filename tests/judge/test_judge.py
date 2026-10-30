@@ -340,3 +340,17 @@ def test_probe_model_unavailable(tmp_path: Path) -> None:
     assert not result.report.available
     assert result.report.unavailable_reason == "cli_not_found"
     assert result.data_rel is None and backend.calls == 0
+
+
+def test_cli_judge_marks_seeded_logs(tmp_path: Path) -> None:
+    writer = MemoryWriter(tmp_path)
+    judge = CliJudge(
+        FakeBackend([VALID]),
+        PROMPT,
+        RawReplyLog(writer),
+        model_requested="claude-sonnet-5-5",
+        clean=simple_clean,
+        seeded=True,
+    )
+    judge.judge(small_posting(), make_resume(), log_dir=LOG_DIR)
+    assert _log(writer, 1)["seeded"] is True

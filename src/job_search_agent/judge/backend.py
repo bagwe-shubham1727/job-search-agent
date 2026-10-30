@@ -57,11 +57,6 @@ STRIPPED_ENV: tuple[str, ...] = (
 )
 """Variables removed from the child environment (R1, CONTRACT §11)."""
 
-FORBIDDEN_FLAGS: frozenset[str] = frozenset(
-    {"--bare", "--dangerously-skip-permissions", "--json-schema"}
-)
-"""Flags the judge must never pass (asserted in tests)."""
-
 WITHHELD_STDERR = "[withheld: credential pattern]"
 
 _CREDENTIAL = re.compile(
