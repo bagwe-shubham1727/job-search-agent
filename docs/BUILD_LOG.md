@@ -102,3 +102,26 @@ passed every check against the real résumé gate.
 - Status BASELINE: 736 fetched, 736 unique valid IDs, new 0, state saved.
 - The board had 734 postings at 18:41 ET, so it had already changed.
 - Raw sha256 `8f02cbe2…`. `verify-evidence` OK; `audit-privacy` 0 findings.
+
+**22:00–22:20 Integration.** WS3's CLI and WS4's judge had been built against guessed signatures, so the first
+`jsa run` that needed a judge would have crashed with `TypeError`. An integration agent fixed the seams and removed
+duplicated policy code: two `SubprocessRunner`s, two JSONPath parsers, two skill extractors, and three strict-JSON
+checks. It added 7 hermetic end-to-end tests (`tests/test_integration.py`) that all fail on the pre-integration
+merge `1c334e9`. The existing test `test_no_count_constant` caught the string `734` in `prompt_experiment.py`
+(contract §2), which turned out to be inside a hard-coded sha256. `select` now reads the pinned digest from
+`.meta.json`. Gate: 944 passed; meta 3 passed. Pushed `f2f3565`.
+
+**22:21 Real judge probe.** `jsa doctor --probe-model`: the R1 argv on the subscription, `is_error: false`, reply
+`OK`, served model `claude-sonnet-5-5`, 1,454 ms, $0.008 (`data/doctor/2026-10-30T02-21-19Z.json`).
+
+**22:21 Seeded pair (labeled SEEDED, no network).**
+- S1 replayed the 18:41 ET hand-check response: BASELINE, 734 IDs.
+- S2 replayed the 21:52 ET live response: SUCCESS_WITH_NEW, 3 new, all Account Executive titles (8330791, 8316059,
+  8330813). Rule NO_MATCH with failed gates recorded; Claude VALID NOT_RELEVANT for all three. `audit-privacy`:
+  0 findings.
+
+**22:22 Prompt-experiment selection.** `jsa exp prompt select` at clean commit `3f54cac`, seed 20261029, drew
+10 dev and 10 held-out postings from the hand-check file. Worksheets do not show the rule verdict. `strata.json`
+is committed (sha recorded) and is not to be opened until `score`.
+
+**22:25 Google-style review** launched (fresh read-only reviewer agent).
