@@ -16,7 +16,6 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
-from pathlib import Path
 from typing import Any
 
 from job_search_agent.rule.location import classify_location, location_signals
@@ -90,11 +89,10 @@ def build_snapshot() -> dict[str, Any]:
 def main() -> None:
     """Writes the snapshot file."""
     document = build_snapshot()
-    target = Path(REPO_ROOT / SNAPSHOT_REL)
-    target.write_text(
+    (REPO_ROOT / SNAPSHOT_REL).write_text(
         json.dumps(document, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    print(f"wrote {SNAPSHOT_REL} ({document['count']} entries)")  # noqa: T201
+    print(f"wrote {SNAPSHOT_REL} ({document['count']} entries)")
 
 
 if __name__ == "__main__":
