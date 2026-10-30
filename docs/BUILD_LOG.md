@@ -144,18 +144,18 @@ at 02:00 ET.
   - Several functions were over 40 lines.
 - Plus 8 nits.
 
-**02:10–06:30 Review fixes** (`b647a82..d53dabe`, 9 commits; a fresh fix agent, test-first, each regression test
+**02:10–02:32 Review fixes** (`b647a82..d53dabe`, 9 commits; a fresh fix agent, test-first, each regression test
 failing before its fix).
 - PLAN amendments R9 (allowlist env) and R10 (`RESUME_VALUE_ECHO` validator code).
 - New exit code 7 (`LOCKED`) for concurrent runs or a same-second run-ID collision.
 - Gate: 988 passed, 2 skipped; meta 3 passed.
 
-**06:33 Probe after R9.** With the allowlist-only env, the real probe still authenticated on the subscription
+**02:33 Probe after R9.** With the allowlist-only env, the real probe still authenticated on the subscription
 (`is_error: false`, reply OK): `data/doctor/2026-10-30T06-33-30Z.json`. Pushed `91256f7`.
 
-**06:35 Ponytail audit launched.** The student installed the ponytail plugin and asked for its audit after the fixes. A
+**02:35 Ponytail audit launched.** The student installed the ponytail plugin and asked for its audit after the fixes. A
 fresh read-only agent follows `skills/ponytail-audit/SKILL.md`. Its focus: what to delete, merge or split, test bloat,
 and TA usability.
 
-**06:35 Sampling deliberately not run yet.** Chapter 1 asks for the student's prediction to be written before the run.
+**02:35 Sampling deliberately not run yet.** Chapter 1 asks for the student's prediction to be written before the run.
 Claude is waiting for that one line rather than running first.
