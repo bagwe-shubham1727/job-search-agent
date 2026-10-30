@@ -11,6 +11,12 @@ found.
 Matching is case-insensitive. Each value is also searched in its JSON-escaped forms,
 so a value inside a JSON string (for example a quoted bullet in a model reply,
 A24) is still found.
+
+An ``allow`` string suppresses only a match that lies entirely inside one of its
+occurrences (for example the persona label around the persona name). It never hides
+a longer value that merely contains it, so allowing the skill terms cannot hide a
+whole résumé bullet that mentions one of them. The judge uses ``scan_text`` this way
+to reject replies that echo résumé values (``RESUME_VALUE_ECHO``, PLAN R10).
 """
 
 from __future__ import annotations
@@ -197,16 +203,19 @@ def _line_col(text: str, offset: int) -> tuple[int, int]:
     return line, offset - start + 1
 
 
-def _mask(text: str, allow: Iterable[str]) -> str:
-    """Blanks out allowed strings (same length) so they cannot produce findings."""
-    for allowed in sorted({a for a in allow if a}, key=len, reverse=True):
-        text = re.sub(
-            re.escape(allowed),
-            lambda match: "\x00" * len(match.group()),
-            text,
-            flags=re.IGNORECASE,
-        )
-    return text
+def _allowed_spans(lowered: str, allow: Iterable[str]) -> list[tuple[int, int]]:
+    """Returns every ``(start, end)`` occurrence of an allowed string (lowercased)."""
+    spans: list[tuple[int, int]] = []
+    for allowed in {a.lower() for a in allow if a}:
+        start = lowered.find(allowed)
+        while start != -1:
+            spans.append((start, start + len(allowed)))
+            start = lowered.find(allowed, start + 1)
+    return spans
+
+
+def _inside(start: int, end: int, spans: Iterable[tuple[int, int]]) -> bool:
+    return any(s <= start and end <= e for s, e in spans)
 
 
 def scan_text(
@@ -223,15 +232,16 @@ def scan_text(
         text: Text to scan.
         values: From ``sensitive_values``.
         location: Label used in findings (e.g. a relative file path).
-        allow: Strings that may appear even if they overlap a value (e.g. the
-            persona label).
+        allow: Strings that may appear even if they contain a value (e.g. the
+            persona label); a match is suppressed only when it lies wholly inside
+            an occurrence of one of them.
         patterns: Also search for absolute paths and credentials (``PATTERNS``).
 
     Returns:
         Findings ordered by position; one per distinct (position, label).
     """
-    masked = _mask(text, allow)
-    lowered = masked.lower()
+    lowered = text.lower()
+    allowed = _allowed_spans(lowered, allow)
     hits: set[tuple[int, FindingKind, str]] = set()
     for value in values:
         covered: list[tuple[int, int]] = []
@@ -239,14 +249,17 @@ def scan_text(
             start = lowered.find(needle)
             while start != -1:
                 end = start + len(needle)
-                if not any(s <= start and end <= e for s, e in covered):
+                if not _inside(start, end, covered) and not _inside(
+                    start, end, allowed
+                ):
                     covered.append((start, end))
                     hits.add((start, FindingKind.RESUME_VALUE, value.resume_path))
                 start = lowered.find(needle, start + 1)
     if patterns:
         for name, (kind, regex) in PATTERNS.items():
-            for match in regex.finditer(masked):
-                hits.add((match.start(), kind, name))
+            for match in regex.finditer(text):
+                if not _inside(match.start(), match.end(), allowed):
+                    hits.add((match.start(), kind, name))
     findings = []
     for offset, kind, label in sorted(hits):
         line, column = _line_col(text, offset)

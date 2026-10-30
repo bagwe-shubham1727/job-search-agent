@@ -17,12 +17,20 @@ Steps:
    types, at least one evidence entry (A16) and a non-empty ``reason``.
 4. Paths. Every ``resume_path`` must resolve in the résumé payload and every
    ``posting_path`` in the posting payload; the root ``$`` is not a real path (A17).
+5. Echo (PLAN R10). When the caller passes ``echo_values`` (from
+   ``privacy.sensitive_values``), ``summary``, every ``evidence[].reason`` and every
+   ``uncertainties`` entry are scanned with ``privacy.scan_text``; a résumé value
+   (name, contact, employer, school, bullet, work authorisation) found there is
+   ``RESUME_VALUE_ECHO``. CONTRACT §12 lets outputs carry only matched skill terms,
+   their paths and the persona label, and these fields are copied into records
+   (§7). This is stricter validation, never repair: it flows through the normal
+   retry-once and then ``INVALID_OUTPUT``.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -31,6 +39,7 @@ from pydantic import ValidationError
 
 from job_search_agent import jsonpath
 from job_search_agent.models import JudgmentReply
+from job_search_agent.privacy import SensitiveValue, scan_text
 from job_search_agent.strict_json import (
     DuplicateKeyError,
     NonStandardConstantError,
@@ -69,6 +78,8 @@ class RejectionCode(StrEnum):
     PATH_IS_ROOT = "PATH_IS_ROOT"
     RESUME_PATH_NOT_FOUND = "RESUME_PATH_NOT_FOUND"
     POSTING_PATH_NOT_FOUND = "POSTING_PATH_NOT_FOUND"
+    RESUME_VALUE_ECHO = "RESUME_VALUE_ECHO"
+    """A free-text field repeats a résumé value that outputs must not carry (R10)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,20 +209,57 @@ def _check_path(
     return None
 
 
+def _echo_fields(reply: JudgmentReply) -> list[tuple[str, str]]:
+    """Returns ``(detail, text)`` for every free-text field copied into records."""
+    fields = [("summary", reply.summary)]
+    fields += [(f"evidence.{i}.reason", e.reason) for i, e in enumerate(reply.evidence)]
+    fields += [(f"uncertainties.{i}", u) for i, u in enumerate(reply.uncertainties)]
+    return fields
+
+
+def echo_details(
+    reply: JudgmentReply,
+    values: Iterable[SensitiveValue],
+    allow: Iterable[str] = (),
+) -> tuple[str, ...]:
+    """Names the free-text fields that repeat a résumé value (never the value).
+
+    Args:
+        reply: A reply that passed the schema.
+        values: From ``privacy.sensitive_values``.
+        allow: Strings that may contain a value (skill terms, the persona label).
+
+    Returns:
+        Field names such as ``"summary"`` or ``"evidence.0.reason"``; empty if none.
+    """
+    value_list = tuple(values)
+    allow_list = tuple(allow)
+    return tuple(
+        where
+        for where, text in _echo_fields(reply)
+        if scan_text(text, value_list, allow=allow_list, patterns=False)
+    )
+
+
 def validate_reply(
     text: str,
     resume_payload: Mapping[str, Any],
     posting_payload: Mapping[str, Any],
     *,
     resolver: PathResolver = jsonpath.resolve,
+    echo_values: Iterable[SensitiveValue] = (),
+    echo_allow: Iterable[str] = (),
 ) -> ValidationResult:
-    """Validates one reply against CONTRACT §8.
+    """Validates one reply against CONTRACT §8 (and §12 when ``echo_values`` given).
 
     Args:
         text: Claude's reply text (the CLI envelope's ``result``), unmodified.
         resume_payload: The résumé object exactly as sent in the prompt.
         posting_payload: The posting object exactly as sent in the prompt.
         resolver: Path resolver; see ``PathResolver``.
+        echo_values: Résumé values that must not appear in the free-text fields
+            (step 5); empty skips the echo check.
+        echo_allow: Strings allowed even if they contain such a value.
 
     Returns:
         ``ValidJudgment`` if every check passes, else ``Rejection`` carrying
@@ -257,6 +305,9 @@ def validate_reply(
                 path_details.append(f"evidence.{number}.{field_name}")
     if path_codes:
         return Rejection(tuple(path_codes), tuple(path_details), text)
+    echoes = echo_details(reply, echo_values, echo_allow)
+    if echoes:
+        return Rejection((RejectionCode.RESUME_VALUE_ECHO,), echoes, text)
     return ValidJudgment(reply)
 
 

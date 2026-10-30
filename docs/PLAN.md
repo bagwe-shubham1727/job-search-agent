@@ -37,6 +37,15 @@
   `LOGNAME`, `SHELL`, `LANG`, `LC_*`, `TERM`, `TMPDIR` and (macOS) `__CF_USER_TEXT_ENCODING` from the parent,
   then sets the three R1 variables. `STRIPPED_ENV` stays only as documentation and for the probe report's
   `env_removed`. The judge and the surface experiments share this function.
+- **R10 — résumé values echoed by Claude are invalid (2026-10-30, review fix 5).** Claude's free text
+  (`summary`, `evidence[].reason`, `uncertainties`) is copied into records (CONTRACT §7), but §12 lets outputs
+  carry only matched skill terms, their paths and the persona label. After the §8 structural and path checks,
+  the validator scans those fields with `privacy.scan_text` against `privacy.sensitive_values(resume)` and
+  rejects a hit with the new code `RESUME_VALUE_ECHO` (details name the field, never the value). The persona
+  label and every skill and target phrase sent are allowed; an allowed string only suppresses a match that lies
+  wholly inside it, so it cannot hide a whole bullet. This is stricter validation, never repair: it goes through
+  the normal retry-once and then `INVALID_OUTPUT`. The prompt experiment uses the same judge path, so it scores
+  the same rule; the surface experiment's ad-hoc check is unchanged.
 
 I read the frozen contract, both assignments, the fixture, the raw hand-check file and its meta. I also checked the installed `claude` CLI (v2.1.312) help text. Before planning I ran a throwaway read-only prototype of the §6 rule (in a sandbox, nothing written) over the committed raw file. The data facts that shaped the plan:
 

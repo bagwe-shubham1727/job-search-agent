@@ -15,6 +15,8 @@ from job_search_agent.judge.validator import (
     evidence_path_findings,
     validate_reply,
 )
+from job_search_agent.privacy import sensitive_values
+from job_search_agent.resume import PERSONA_LABEL
 from tests.judge.doubles import make_resume, simple_clean, small_posting, valid_reply
 
 RESUME = build_resume_payload(make_resume())
@@ -326,3 +328,25 @@ def test_path_findings_counts_parseable_reply_even_if_schema_fails() -> None:
 def test_path_findings_none_for_unparseable() -> None:
     assert evidence_path_findings("```json\n{}\n```", RESUME, POSTING) is None
     assert evidence_path_findings("{}", RESUME, POSTING) is None
+
+
+# --- review fix 5: RESUME_VALUE_ECHO ----------------------------------------------
+
+
+def test_echo_check_runs_only_when_values_are_given() -> None:
+    resume = make_resume()
+    name = resume.to_dict()["personal"]["name"]
+    text = _dump(valid_reply(summary=f"{name} is a fit."))
+    assert isinstance(_check(text), ValidJudgment)  # no values: structural only
+    result = validate_reply(
+        text,
+        build_resume_payload(resume),
+        build_posting_payload(small_posting(), clean=simple_clean),
+        echo_values=sensitive_values(resume),
+        echo_allow=(PERSONA_LABEL,),
+    )
+    assert isinstance(result, Rejection)
+    assert result.codes == (RejectionCode.RESUME_VALUE_ECHO,)
+    assert result.details == ("summary",)
+    assert name not in " ".join(result.details)
+    assert result.original_text == text

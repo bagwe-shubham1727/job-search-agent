@@ -63,6 +63,8 @@ from job_search_agent.models import (
     VerifiedResume,
 )
 from job_search_agent.ports import Clock, CommandRunner, ModelBackend
+from job_search_agent.privacy import sensitive_values
+from job_search_agent.resume import PERSONA_LABEL
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +124,26 @@ def _summary(attempt: JudgeAttempt) -> AttemptSummary:
     )
 
 
+def echo_allow_list(resume_payload: Mapping[str, Any]) -> tuple[str, ...]:
+    """Returns the strings a reply may always contain (review fix 5).
+
+    Args:
+        resume_payload: The résumé object as sent.
+
+    Returns:
+        The persona label and every skill and target phrase that was sent; CONTRACT
+        §12 allows matched skill terms and the persona label in outputs.
+    """
+    allowed = [PERSONA_LABEL]
+    for section in ("skills", "target"):
+        arrays = resume_payload.get(section)
+        if isinstance(arrays, Mapping):
+            for items in arrays.values():
+                if isinstance(items, list):
+                    allowed += [item for item in items if isinstance(item, str)]
+    return tuple(allowed)
+
+
 def judge_posting_detailed(
     backend: ModelBackend,
     prompt: PromptContract,
@@ -177,6 +199,8 @@ def judge_posting_detailed(
     posting_payload = build_posting_payload(posting, clean=clean)
     digest = payload_sha256(resume_payload, posting_payload)
     text = prompt.render(render_json(resume_payload), render_json(posting_payload))
+    echo_values = sensitive_values(resume)
+    echo_allow = echo_allow_list(resume_payload)
 
     attempts: list[JudgeAttempt] = []
     max_attempts = 2 if retry_once else 1
@@ -186,7 +210,12 @@ def judge_posting_detailed(
         result: ValidationResult | None = None
         if reply.ok and reply.result_text is not None:
             result = validate_reply(
-                reply.result_text, resume_payload, posting_payload, resolver=resolver
+                reply.result_text,
+                resume_payload,
+                posting_payload,
+                resolver=resolver,
+                echo_values=echo_values,
+                echo_allow=echo_allow,
             )
         entry = RawAttemptLog(
             posting_id=posting.posting_id,

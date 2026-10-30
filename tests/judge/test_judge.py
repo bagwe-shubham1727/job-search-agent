@@ -354,3 +354,55 @@ def test_cli_judge_marks_seeded_logs(tmp_path: Path) -> None:
     )
     judge.judge(small_posting(), make_resume(), log_dir=LOG_DIR)
     assert _log(writer, 1)["seeded"] is True
+
+
+# --- review fix 5: résumé values echoed in free text are rejected -----------------
+
+
+def _resume_doc() -> dict[str, Any]:
+    return make_resume().to_dict()
+
+
+@pytest.mark.parametrize("where", ["summary", "reason", "uncertainty"])
+def test_resume_value_echo_is_invalid_after_retry(tmp_path: Path, where: str) -> None:
+    doc = _resume_doc()
+    leaks = {
+        "summary": f"{doc['personal']['name']} fits this role.",
+        "reason": f"Matches work at {doc['experience'][0]['company']}.",
+        "uncertainty": f"Unclear: {doc['projects'][0]['bullets'][0]}",
+    }
+    reply = valid_reply()
+    if where == "summary":
+        reply["summary"] = leaks["summary"]
+    elif where == "reason":
+        reply["evidence"][0]["reason"] = leaks["reason"]
+    else:
+        reply["uncertainties"] = ["ok", leaks["uncertainty"]]
+    text = json.dumps(reply)
+    backend = FakeBackend([text, text])
+    run, writer = _run(backend, tmp_path)
+    judgment = run.outcome.judgment
+    assert judgment.status is JudgmentStatus.INVALID_OUTPUT
+    assert backend.calls == 2  # stricter validation flows through retry-once
+    for attempt in judgment.diagnostic.attempts:
+        assert attempt.validation_codes == ["RESUME_VALUE_ECHO"]
+    assert judgment.summary is None and judgment.uncertainties == []
+    assert _log(writer, 1)["validation"]["codes"] == ["RESUME_VALUE_ECHO"]
+
+
+def test_skill_terms_and_persona_label_are_not_an_echo(tmp_path: Path) -> None:
+    doc = _resume_doc()
+    terms = [
+        t
+        for key in ("languages", "backend", "cloud_devops")
+        for t in doc["skills"][key]
+    ]
+    reply = valid_reply(
+        summary="kiran-joshi (fictional) lists " + ", ".join(terms) + ".",
+        uncertainties=[f"Whether {doc['target']['roles'][0]} covers this level."],
+    )
+    reply["evidence"][0]["reason"] = f"{terms[0]} and {terms[-1]} both appear."
+    backend = FakeBackend([json.dumps(reply)])
+    run, _ = _run(backend, tmp_path)
+    assert run.outcome.judgment.status is JudgmentStatus.VALID
+    assert backend.calls == 1

@@ -161,3 +161,14 @@ def test_scan_tree_reports_relative_locations(
 def test_sensitive_values_requires_verified_resume() -> None:
     with pytest.raises(TypeError):
         sensitive_values({"personal": {}})  # type: ignore[arg-type]
+
+
+def test_allow_never_hides_a_longer_value_that_contains_it(
+    verified_resume: VerifiedResume,
+) -> None:
+    bullet = verified_resume.to_dict()["projects"][0]["bullets"][0]
+    word = max(bullet.split(), key=len)
+    findings = scan_text(
+        f"note: {bullet}", sensitive_values(verified_resume), allow=[word]
+    )
+    assert [f.label for f in findings] == ["$.projects[0].bullets[0]"]
