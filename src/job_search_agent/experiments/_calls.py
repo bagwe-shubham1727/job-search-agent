@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from job_search_agent.clock import to_eastern
-from job_search_agent.experiments.metrics import CallScore
 from job_search_agent.judge.judge import judge_posting_detailed
 from job_search_agent.judge.prompt import PromptContract
 from job_search_agent.judge.rawlog import RawReplyLog
@@ -48,17 +47,6 @@ class CallRecord(BaseModel):
     started_at_et: AwareDatetime | None
     prompt_id: str
     prompt_sha256: str
-
-    def score(self) -> CallScore:
-        """Returns the metrics view of this call."""
-        return CallScore(
-            posting_id=self.posting_id,
-            format_valid=self.first_reply_valid,
-            label=self.label,
-            parseable=self.parseable,
-            path_entries=self.path_entries,
-            path_entries_valid=self.path_entries_valid,
-        )
 
 
 JudgeCall = Callable[[Posting, PromptContract, str], CallRecord]

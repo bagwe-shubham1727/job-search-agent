@@ -220,8 +220,8 @@ PRE_SPAWN_ERRORS: frozenset[BackendErrorKind] = frozenset(
 class ExitCode(IntEnum):
     """Process exit codes of ``jsa`` (PLAN §1.4).
 
-    ``6`` is taken by the experiments CLI (``EXPERIMENT_REFUSED_EXIT``, a refused
-    ordering gate). ``LOCKED`` (7) means another ``jsa`` process holds the data lock
+    ``EXPERIMENT_REFUSED`` (6) is ``jsa exp ...`` refusing at an ordering gate or
+    input check. ``LOCKED`` (7) means another ``jsa`` process holds the data lock
     for the same mode (``data/<live|seeded>/.lock``), or a run with the same
     one-second run ID already exists; nothing was fetched or written, so the command
     can simply be retried.
@@ -233,6 +233,7 @@ class ExitCode(IntEnum):
     RESUME_REFUSED = 3
     STATE_CORRUPT = 4
     CONFIG_ERROR = 5
+    EXPERIMENT_REFUSED = 6
     LOCKED = 7
 
 

@@ -7,7 +7,7 @@
     jsa exp prompt select | seal | run --prompt v1 --set dev | freeze | score
     jsa exp surfaces prepare [--posting-id ID] | run a|b|c [--dry-run] | capture
 
-A refused gate prints its reason and exits with ``EXPERIMENT_REFUSED_EXIT`` (6).
+A refused gate prints its reason and exits with ``ExitCode.EXPERIMENT_REFUSED`` (6).
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from typing import Any
 
 from job_search_agent.config import ConfigOverrides
 from job_search_agent.experiments import prompt_experiment, sampling, surfaces
-from job_search_agent.experiments._io import EXPERIMENT_REFUSED_EXIT, ExperimentError
+from job_search_agent.experiments._io import ExperimentError
 from job_search_agent.experiments._wiring import Wiring
 from job_search_agent.experiments.selection import HANDCHECK_IDS
 from job_search_agent.judge.payload import build_posting_payload, build_resume_payload
@@ -45,7 +45,7 @@ def _handler(
             result = action(factory(args), args)
         except ExperimentError as exc:
             print(f"jsa exp: refused: {exc}", file=sys.stderr)
-            return EXPERIMENT_REFUSED_EXIT
+            return int(exc.exit_code)
         if result is not None:
             print(json.dumps(_summary(result), indent=2, sort_keys=True, default=str))
         return 0

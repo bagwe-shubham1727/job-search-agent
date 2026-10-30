@@ -29,6 +29,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from job_search_agent.errors import InvalidResponse
 from job_search_agent.experiments._io import (
     STUDENT_MARKER,
     ExperimentContext,
@@ -39,6 +40,7 @@ from job_search_agent.judge.payload import render_json
 from job_search_agent.judge.prompt import PromptContract
 from job_search_agent.judge.validator import Rejection, validate_reply
 from job_search_agent.ports import CommandRunner, HttpFetcher
+from job_search_agent.providers.greenhouse import GreenhouseProvider
 from job_search_agent.sources import sha256_hex
 
 OUT = "experiments/surfaces"
@@ -565,20 +567,12 @@ def parse_transcript(text: str, *, sandbox: str, home: str) -> dict[str, Any]:
 
 
 def _ids_from_board(body: bytes) -> set[str] | None:
+    """The valid posting IDs, parsed by the pipeline's own provider."""
     try:
-        data = json.loads(body)
-    except json.JSONDecodeError:
+        board = GreenhouseProvider().parse(body)
+    except InvalidResponse:
         return None
-    jobs = data.get("jobs") if isinstance(data, dict) else None
-    if not isinstance(jobs, list):
-        return None
-    return {
-        str(j["id"])
-        for j in jobs
-        if isinstance(j, dict)
-        and isinstance(j.get("id"), int)
-        and not isinstance(j.get("id"), bool)
-    }
+    return {p.posting_id for p in board.postings}
 
 
 def id_diff(

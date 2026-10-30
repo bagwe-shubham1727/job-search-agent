@@ -399,3 +399,14 @@ def test_git_repo_snapshot_excludes_own_outputs(tmp_path: Path) -> None:
     (argv,) = [c.argv for c in runner.calls]
     assert argv[:2] == ("git", "ls-files") and "--others" in argv
     assert argv[-1] == ":(exclude)data/experiments/surfaces"
+
+
+def test_surface_c_truth_uses_the_pipeline_parser() -> None:
+    body = json.dumps(
+        {
+            "jobs": [{"id": 7}, {"id": 7}, {"id": "8"}, {"id": True}, {"id": 9}],
+            "meta": {"total": 5},
+        }
+    ).encode()
+    assert surfaces._ids_from_board(body) == {"7", "9"}
+    assert surfaces._ids_from_board(b"<html>") is None

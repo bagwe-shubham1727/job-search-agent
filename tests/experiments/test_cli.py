@@ -9,8 +9,11 @@ from typing import Any
 import pytest
 
 from job_search_agent.cli import build_parser
-from job_search_agent.experiments._io import EXPERIMENT_REFUSED_EXIT
+from job_search_agent.errors import PathRejected
+from job_search_agent.experiments._io import ExperimentError, LocalRepoReader
 from job_search_agent.experiments.cli import register
+from job_search_agent.fsio import ReadPolicy
+from job_search_agent.models import ExitCode
 from tests.experiments.helpers import make_repo
 
 
@@ -60,7 +63,7 @@ def test_refused_gate_returns_distinct_exit(
     repo = make_repo(tmp_path)
     parser = _parser(_FakeWiring(repo.ctx))
     args = parser.parse_args(["exp", "prompt", "seal"])
-    assert args.handler(args) == EXPERIMENT_REFUSED_EXIT
+    assert args.handler(args) == int(ExitCode.EXPERIMENT_REFUSED)
     assert "refused: no selection yet" in capsys.readouterr().err
 
 
@@ -70,5 +73,19 @@ def test_sampling_table_success_prints_summary(
     repo = make_repo(tmp_path)
     parser = _parser(_FakeWiring(repo.ctx))
     args = parser.parse_args(["exp", "sampling", "table"])
-    assert args.handler(args) == EXPERIMENT_REFUSED_EXIT  # no manifest yet
+    assert args.handler(args) == int(ExitCode.EXPERIMENT_REFUSED)  # no manifest yet
     assert "no sampling manifest" in capsys.readouterr().err
+
+
+def test_local_repo_reader_keeps_to_the_read_roots(tmp_path: Path) -> None:
+    (tmp_path / "evidence").mkdir()
+    (tmp_path / "evidence" / "ok.json").write_text("{}")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "secret.py").write_text("x")
+    reader = LocalRepoReader(ReadPolicy(tmp_path))
+    assert reader.read_bytes("evidence/ok.json") == b"{}"
+    assert reader.exists("evidence/ok.json")
+    with pytest.raises(PathRejected):
+        reader.read_bytes("src/secret.py")
+    with pytest.raises(ExperimentError):
+        reader.read_bytes("../outside.json")

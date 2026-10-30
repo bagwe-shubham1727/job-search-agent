@@ -34,7 +34,7 @@ from job_search_agent.experiments._io import (
     read_json,
     record_calls,
 )
-from job_search_agent.experiments.metrics import INVALID, Rate, rate
+from job_search_agent.experiments.metrics import INVALID, Rate, outcome, rate
 from job_search_agent.experiments.selection import HANDCHECK_IDS
 from job_search_agent.judge.prompt import PromptContract
 from job_search_agent.models import Posting, VerdictLabel
@@ -174,12 +174,6 @@ class PostingSpread(_Out):
     format_acceptance: Rate
 
 
-def _outcome(call: CallRecord) -> str:
-    if not call.first_reply_valid or call.label is None:
-        return INVALID
-    return "MATCH" if call.label == "RELEVANT" else "NO_MATCH"
-
-
 def spread_table(
     calls: Sequence[CallRecord], hand: Mapping[str, VerdictLabel]
 ) -> list[PostingSpread]:
@@ -197,7 +191,7 @@ def spread_table(
         mine = [c for c in calls if c.posting_id == pid]
         if not mine:
             continue
-        outcomes = [_outcome(c) for c in mine]
+        outcomes = [outcome(c) for c in mine]
         counts = Counter(outcomes)
         top = max(counts.values())
         modal = sorted(o for o, c in counts.items() if c == top)

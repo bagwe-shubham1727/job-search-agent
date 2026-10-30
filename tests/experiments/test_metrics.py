@@ -4,38 +4,50 @@ from __future__ import annotations
 
 import pytest
 
+from job_search_agent.experiments._calls import CallRecord
 from job_search_agent.experiments.metrics import (
-    CallScore,
     discordant,
+    outcome,
     rate,
     rule_vs_hand_audit,
     score_cell,
     wilson_interval,
 )
 from job_search_agent.experiments.metrics import model_to_verdict as to_verdict
-from job_search_agent.models import VerdictLabel
+from job_search_agent.models import JudgmentStatus, VerdictLabel
 
 M, N = VerdictLabel.MATCH, VerdictLabel.NO_MATCH
 
 
 def _score(
     pid: str, label: str | None, *, entries: int = 1, valid: int = 1
-) -> CallScore:
-    return CallScore(
+) -> CallRecord:
+    return CallRecord(
         posting_id=pid,
-        format_valid=label is not None,
+        status=JudgmentStatus.VALID if label else JudgmentStatus.INVALID_OUTPUT,
+        first_reply_valid=label is not None,
+        validation_codes=[],
         label=label,  # type: ignore[arg-type]
+        evidence_paths=[],
         parseable=label is not None or entries > 0,
         path_entries=entries,
         path_entries_valid=valid,
+        session_id=None,
+        model_served=[],
+        raw_log_ref=None,
+        started_at_utc=None,
+        started_at_et=None,
+        prompt_id="judge.v1",
+        prompt_sha256="0" * 64,
     )
 
 
 def test_label_mapping_relevant_is_match() -> None:
     assert to_verdict("RELEVANT") is VerdictLabel.MATCH
     assert to_verdict("NOT_RELEVANT") is VerdictLabel.NO_MATCH
-    assert _score("1", "RELEVANT").outcome == "MATCH"
-    assert _score("1", None).outcome == "INVALID"
+    assert outcome(_score("1", "RELEVANT")) == "MATCH"
+    assert outcome(_score("1", "NOT_RELEVANT")) == "NO_MATCH"
+    assert outcome(_score("1", None)) == "INVALID"
 
 
 def test_wilson_interval_known_values() -> None:

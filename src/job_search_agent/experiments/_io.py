@@ -17,13 +17,10 @@ from pathlib import Path, PurePosixPath
 from typing import Any, ClassVar, Protocol
 
 from job_search_agent.errors import AgentError
-from job_search_agent.fsio import OutputRoot
+from job_search_agent.fsio import OutputRoot, ReadPolicy
 from job_search_agent.models import ExitCode
 from job_search_agent.ports import Clock, GitInspector
 from job_search_agent.sources import sha256_hex
-
-EXPERIMENT_REFUSED_EXIT = 6
-"""Exit status of ``jsa exp ...`` when a gate refuses (distinct from run codes)."""
 
 
 class ExperimentError(AgentError):
@@ -32,7 +29,7 @@ class ExperimentError(AgentError):
     The message says which gate and what to do; it never contains résumé values.
     """
 
-    exit_code: ClassVar[ExitCode] = ExitCode.CONFIG_ERROR
+    exit_code: ClassVar[ExitCode] = ExitCode.EXPERIMENT_REFUSED
 
 
 class RepoReader(Protocol):
@@ -48,25 +45,20 @@ class RepoReader(Protocol):
 
 
 class LocalRepoReader:
-    """``RepoReader`` over a project root on disk.
+    """``RepoReader`` limited to the read roots of ``fsio.ReadPolicy``.
 
     Args:
-        root: The project root.
-        check: Optional read-policy hook (``ReadPolicy.check``) applied to every path.
+        policy: The project's read policy.
     """
 
-    def __init__(self, root: Path, check: Callable[[Path], Path] | None = None) -> None:
-        self._root = root
-        self._check = check
+    def __init__(self, policy: ReadPolicy) -> None:
+        self._policy = policy
 
     def _path(self, rel: str) -> Path:
         pure = PurePosixPath(rel)
         if pure.is_absolute() or ".." in pure.parts:
             raise ExperimentError(f"refusing to read outside the project: {rel}")
-        path = self._root / rel
-        if self._check is not None:
-            path = self._check(path)
-        return path
+        return self._policy.check(rel)
 
     def read_bytes(self, rel: str) -> bytes:
         """Returns the file's bytes."""

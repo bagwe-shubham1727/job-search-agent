@@ -73,7 +73,7 @@ class Wiring:
         root = self.config.project_root
         return ExperimentContext(
             writer=self.out,
-            reader=LocalRepoReader(root, ReadPolicy(root).check),
+            reader=LocalRepoReader(ReadPolicy(root)),
             git=SubprocessGit(root, runner=self.runner),
             clock=SystemClock(),
             data_dir=self.config.data_dir.relative_to(root.resolve()).as_posix(),

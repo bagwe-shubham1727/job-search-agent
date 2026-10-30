@@ -15,17 +15,17 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
-from typing import Literal
+from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from job_search_agent.experiments._calls import CallRecord
 from job_search_agent.models import ModelLabel, VerdictLabel
 
 Z_95 = 1.959963984540054
 """Two-sided 95% normal quantile."""
 
-INVALID = "INVALID"
+INVALID: Final = "INVALID"
 """Outcome name for a first reply that failed validation or a failed call."""
 
 Outcome = Literal["MATCH", "NO_MATCH", "INVALID"]
@@ -94,36 +94,18 @@ def rate(k: int, n: int) -> Rate:
     return Rate(k=k, n=n, value=k / n, wilson_low=low, wilson_high=high)
 
 
-@dataclass(frozen=True, slots=True)
-class CallScore:
-    """The scored first reply of one call.
+def outcome(call: CallRecord) -> Outcome:
+    """``MATCH``/``NO_MATCH`` for a valid first reply (§16 mapping), else ``INVALID``.
 
-    Attributes:
-        posting_id: The posting.
-        format_valid: The first reply passed the §8 validator.
-        label: Claude's label when ``format_valid``, else ``None``.
-        parseable: The reply parsed as a JSON object (schema aside).
-        path_entries: Evidence entries (objects) in a parseable reply.
-        path_entries_valid: Of those, entries whose two paths both exist.
+    Args:
+        call: One experiment call.
+
+    Returns:
+        The outcome compared with the hand label.
     """
-
-    posting_id: str
-    format_valid: bool
-    label: ModelLabel | None
-    parseable: bool = False
-    path_entries: int = 0
-    path_entries_valid: int = 0
-
-    @property
-    def outcome(self) -> Outcome:
-        """``MATCH``/``NO_MATCH`` for a valid reply, else ``INVALID``."""
-        if not self.format_valid or self.label is None:
-            return "INVALID"
-        return (
-            "MATCH"
-            if model_to_verdict(self.label) is VerdictLabel.MATCH
-            else "NO_MATCH"
-        )
+    if not call.first_reply_valid or call.label is None:
+        return INVALID
+    return "MATCH" if model_to_verdict(call.label) is VerdictLabel.MATCH else "NO_MATCH"
 
 
 class EvidencePathStats(_Out):
@@ -150,12 +132,12 @@ class CellMetrics(_Out):
 
 
 def score_cell(
-    scores: Sequence[CallScore], hand: Mapping[str, VerdictLabel]
+    scores: Sequence[CallRecord], hand: Mapping[str, VerdictLabel]
 ) -> CellMetrics:
     """Computes the metrics of one cell.
 
     Args:
-        scores: One first-reply score per posting.
+        scores: One first-reply call per posting.
         hand: The student's hand label per posting ID.
 
     Returns:
@@ -165,19 +147,19 @@ def score_cell(
         KeyError: If a scored posting has no hand label.
     """
     n = len(scores)
-    valid = [s for s in scores if s.outcome != INVALID]
-    agree = [s for s in valid if s.outcome == hand[s.posting_id].value]
+    valid = [s for s in scores if outcome(s) != INVALID]
+    agree = [s for s in valid if outcome(s) == hand[s.posting_id].value]
     confusion: dict[str, dict[str, int]] = {
         h.value: {"MATCH": 0, "NO_MATCH": 0, INVALID: 0} for h in VerdictLabel
     }
     for score in scores:
-        confusion[hand[score.posting_id].value][score.outcome] += 1
+        confusion[hand[score.posting_id].value][outcome(score)] += 1
     parseable = [s for s in scores if s.parseable]
     entries = sum(s.path_entries for s in parseable)
     valid_entries = sum(s.path_entries_valid for s in parseable)
     return CellMetrics(
         n=n,
-        format_acceptance=rate(sum(1 for s in scores if s.format_valid), n),
+        format_acceptance=rate(sum(1 for s in scores if s.first_reply_valid), n),
         agreement_invalid_as_disagreement=rate(len(agree), n),
         agreement_among_valid=rate(len(agree), len(valid)),
         confusion=confusion,
@@ -204,16 +186,16 @@ class Discordance(_Out):
 
 
 def discordant(
-    v1: Sequence[CallScore],
-    v2: Sequence[CallScore],
+    v1: Sequence[CallRecord],
+    v2: Sequence[CallRecord],
     strata: Mapping[str, str],
     hand: Mapping[str, VerdictLabel],
 ) -> list[Discordance]:
     """Lists postings whose v1 and v2 outcomes differ, by ID.
 
     Args:
-        v1: First-reply scores under v1.
-        v2: First-reply scores under v2 (same postings).
+        v1: First-reply calls under v1.
+        v2: First-reply calls under v2 (same postings).
         strata: Stratum per posting ID.
         hand: Hand label per posting ID.
 
@@ -226,11 +208,11 @@ def discordant(
             posting_id=s.posting_id,
             stratum=strata[s.posting_id],
             hand_label=hand[s.posting_id],
-            v1=s.outcome,
-            v2=second[s.posting_id].outcome,
+            v1=outcome(s),
+            v2=outcome(second[s.posting_id]),
         )
         for s in v1
-        if s.posting_id in second and s.outcome != second[s.posting_id].outcome
+        if s.posting_id in second and outcome(s) != outcome(second[s.posting_id])
     ]
     return sorted(rows, key=lambda r: int(r.posting_id))
 

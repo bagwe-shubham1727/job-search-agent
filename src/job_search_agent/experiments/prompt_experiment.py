@@ -40,7 +40,6 @@ from job_search_agent.experiments._io import (
     record_calls,
 )
 from job_search_agent.experiments.metrics import (
-    CallScore,
     discordant,
     rule_vs_hand_audit,
     score_cell,
@@ -410,10 +409,10 @@ def cmd_freeze(ctx: ExperimentContext, *, load_prompt: LoadPrompt) -> dict[str, 
 
 def _scores(
     ctx: ExperimentContext, prompt: str, set_name: str
-) -> tuple[list[CallScore], bool]:
+) -> tuple[list[CallRecord], bool]:
     doc = ctx.read_data_json(_results(prompt, set_name))
-    scores = [CallRecord.model_validate(c).score() for c in doc["calls"]]
-    return scores, is_complete(doc)
+    calls = [CallRecord.model_validate(c) for c in doc["calls"]]
+    return calls, is_complete(doc)
 
 
 def cmd_score(ctx: ExperimentContext) -> dict[str, Any]:
