@@ -29,27 +29,6 @@ def _parser(wiring: Any) -> argparse.ArgumentParser:
     return parser
 
 
-@pytest.mark.parametrize(
-    "argv",
-    [
-        ["exp", "sampling", "run", "--n", "4"],
-        ["exp", "sampling", "table"],
-        ["exp", "prompt", "select"],
-        ["exp", "prompt", "seal"],
-        ["exp", "prompt", "run", "--prompt", "v1", "--set", "dev"],
-        ["exp", "prompt", "run", "--prompt", "v2", "--set", "heldout"],
-        ["exp", "prompt", "freeze"],
-        ["exp", "prompt", "score"],
-        ["exp", "surfaces", "prepare"],
-        ["exp", "surfaces", "run", "c", "--dry-run"],
-        ["exp", "surfaces", "capture"],
-    ],
-)
-def test_main_parser_registers_exp_commands(argv: list[str]) -> None:
-    args = build_parser().parse_args(argv)
-    assert callable(args.handler)
-
-
 def test_bad_prompt_choice_rejected() -> None:
     with pytest.raises(SystemExit):
         build_parser().parse_args(

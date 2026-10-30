@@ -69,6 +69,5 @@ testpaths = ["tests"]
 addopts = ["-ra", "--strict-markers", "--strict-config"]
 xfail_strict = true
 markers = [
-    "live: needs the real network or the real claude CLI; skipped unless --live is given",
     "subprocess: allowed to start child processes (the autouse no-subprocess guard is lifted)",
 ]
