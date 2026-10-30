@@ -24,14 +24,10 @@ from job_search_agent.models import (
     SkillEvidence,
     VerdictLabel,
 )
+from tests.conftest import REPO_ROOT
 from tests.fakes import FakeBackend, FakeGit, FixedClock
-from tests.judge.doubles import (
-    REPO_ROOT,
-    MemoryWriter,
-    make_resume,
-    simple_clean,
-    small_posting,
-)
+from tests.judge.doubles import MemoryWriter
+from tests.tools.builders import fixture_resume, small_posting
 
 _FALLBACK_PREFIXES = ("evidence/", "persona/")
 
@@ -256,9 +252,8 @@ def first_reply_judge(
     backend = FakeBackend(list(script))
     judge = FirstReplyJudge(
         backend=backend,
-        resume=make_resume(),
+        resume=fixture_resume(),
         rawlog=RawReplyLog(repo.writer),
         model_requested="claude-sonnet-5-5",
-        clean=simple_clean,
     )
     return judge, backend

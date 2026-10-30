@@ -15,7 +15,7 @@ from job_search_agent.judge.prompt import (
     contract_from_bytes,
     load_prompt,
 )
-from tests.judge.doubles import REPO_ROOT
+from tests.conftest import REPO_ROOT
 
 V1_LABEL_DEFINITION = (
     "RELEVANT if, based only on the supplied text, the posting is worth Kiran "

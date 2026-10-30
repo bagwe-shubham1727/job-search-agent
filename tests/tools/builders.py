@@ -106,6 +106,18 @@ def posting(**fields: Any) -> Posting:
     return posting_from_job(job(**fields))
 
 
+def small_posting(**fields: Any) -> Posting:
+    """``posting`` with escaped-HTML content naming Java, Python and AWS, ID 1234."""
+    base: dict[str, Any] = {
+        "id": 1234,
+        "content": "&lt;p&gt;Java and Python on AWS&lt;/p&gt;",
+        "absolute_url": "https://example.invalid/jobs/1234",
+        "updated_at": "2026-10-29T10:00:00-04:00",
+    }
+    base.update(fields)
+    return posting(**base)
+
+
 def posting_from_job(raw_job: dict[str, Any]) -> Posting:
     """Normalises one job object through the real Greenhouse parser."""
     body = json.dumps({"jobs": [raw_job], "meta": {"total": 1}}).encode()

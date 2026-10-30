@@ -27,9 +27,7 @@ SAMPLING_V1 = "experiments/sampling/manifest.json"
 
 def _select(repo: Repo, board: Board) -> dict[str, Any]:
     repo.commit(pe.PROCEDURE_REL)
-    return pe.cmd_select(
-        repo.ctx, postings=board.postings, evaluate=board.evaluate, clean=lambda s: s
-    )
+    return pe.cmd_select(repo.ctx, postings=board.postings, evaluate=board.evaluate)
 
 
 def _hand(board: Board) -> dict[str, str]:
@@ -102,9 +100,7 @@ def test_select_requires_committed_procedure(tmp_path: Path) -> None:
     repo = make_repo(tmp_path)
     board = make_board(DEFAULT_COUNTS)
     with pytest.raises(ExperimentError, match="PROCEDURE.md"):
-        pe.cmd_select(
-            repo.ctx, postings=board.postings, evaluate=board.evaluate, clean=str
-        )
+        pe.cmd_select(repo.ctx, postings=board.postings, evaluate=board.evaluate)
 
 
 def test_select_writes_outputs_without_strata_and_refuses_twice(

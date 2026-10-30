@@ -27,7 +27,6 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from job_search_agent.experiments._io import ExperimentError
-from job_search_agent.judge.payload import Cleaner
 from job_search_agent.models import (
     Gate,
     LocationLabel,
@@ -35,6 +34,7 @@ from job_search_agent.models import (
     RuleVerdict,
     VerdictLabel,
 )
+from job_search_agent.text import clean_html
 
 SEED = 20261029
 """The pre-registered seed."""
@@ -199,7 +199,6 @@ def render_worksheet(
     set_name: str,
     ids: Sequence[str],
     postings: Mapping[str, Posting],
-    clean: Cleaner,
 ) -> str:
     """Renders a hand-labeling worksheet. It shows no verdict and no stratum.
 
@@ -207,7 +206,6 @@ def render_worksheet(
         set_name: ``"dev"`` or ``"heldout"``.
         ids: Posting IDs in worksheet order.
         postings: Postings by ID.
-        clean: HTML cleaner (CONTRACT §5).
 
     Returns:
         Markdown text.
@@ -244,7 +242,7 @@ def render_worksheet(
             "",
             "<details><summary>Cleaned content</summary>",
             "",
-            clean(posting.content_raw),
+            clean_html(posting.content_raw),
             "",
             "</details>",
             "",

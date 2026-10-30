@@ -1,4 +1,4 @@
-"""``judge_posting``: retry-once orchestration and the raw-reply log (PLAN §5.5)."""
+"""``judge_posting_detailed``: retry once, and the raw-reply log (PLAN §5.5)."""
 
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ from job_search_agent.judge.judge import (
     JudgeRun,
     build_backend,
     build_judge,
-    judge_posting,
     judge_posting_detailed,
     probe_model,
 )
@@ -29,15 +28,10 @@ from job_search_agent.models import (
     JudgmentStatus,
 )
 from job_search_agent.ports import Judge
+from tests.conftest import REPO_ROOT
 from tests.fakes import FakeBackend, FakeRunner, FixedClock
-from tests.judge.doubles import (
-    REPO_ROOT,
-    MemoryWriter,
-    make_resume,
-    simple_clean,
-    small_posting,
-    valid_reply,
-)
+from tests.judge.doubles import MemoryWriter, valid_reply
+from tests.tools.builders import fixture_resume, small_posting
 
 LOG_DIR = "live/runs/2026-10-30T02-11-07Z/model/1234"
 VALID = json.dumps(valid_reply())
@@ -53,12 +47,11 @@ def _run(
         backend,
         PROMPT,
         small_posting(),
-        make_resume(),
+        fixture_resume(),
         RawReplyLog(writer),
         log_dir=LOG_DIR,
         model_requested="claude-sonnet-5-5",
         retry_once=retry_once,
-        clean=simple_clean,
     )
     return run, writer
 
@@ -119,15 +112,14 @@ def test_retry_prompt_identical(tmp_path: Path) -> None:
     assert _log(writer, 1)["session_id"] != _log(writer, 2)["session_id"]
     # A second, independent judgment of the same posting renders the same bytes.
     again = FakeBackend([VALID])
-    judge_posting(
+    judge_posting_detailed(
         again,
         PROMPT,
         small_posting(),
-        make_resume(),
+        fixture_resume(),
         RawReplyLog(MemoryWriter(tmp_path / "again")),
         log_dir=LOG_DIR,
         model_requested=None,
-        clean=simple_clean,
     )
     assert again.prompts[0] == backend.prompts[0]
 
@@ -225,15 +217,14 @@ def test_raw_log_fields(tmp_path: Path) -> None:
 
 def test_unverified_resume_refused(tmp_path: Path) -> None:
     with pytest.raises(TypeError):
-        judge_posting(
+        judge_posting_detailed(
             FakeBackend([VALID]),
             PROMPT,
             small_posting(),
-            make_resume().to_dict(),  # type: ignore[arg-type]
+            fixture_resume().to_dict(),  # type: ignore[arg-type]
             RawReplyLog(MemoryWriter(tmp_path)),
             log_dir=LOG_DIR,
             model_requested=None,
-            clean=simple_clean,
         )
 
 
@@ -244,9 +235,8 @@ def test_cli_judge_implements_port(tmp_path: Path) -> None:
         PROMPT,
         RawReplyLog(MemoryWriter(tmp_path)),
         model_requested="claude-sonnet-5-5",
-        clean=simple_clean,
     )
-    outcome = judge.judge(small_posting(), make_resume(), log_dir=LOG_DIR)
+    outcome = judge.judge(small_posting(), fixture_resume(), log_dir=LOG_DIR)
     assert outcome.is_valid and backend.calls == 2  # the pipeline retries once
 
 
@@ -285,9 +275,8 @@ def test_build_backend_none_is_unavailable(tmp_path: Path) -> None:
         make_empty_dir=writer.make_empty_dir,
         clock=clock,
         repo_rel=lambda rel: f"data/{rel}",
-        clean=simple_clean,
     )
-    outcome = judge.judge(small_posting(), make_resume(), log_dir=LOG_DIR)
+    outcome = judge.judge(small_posting(), fixture_resume(), log_dir=LOG_DIR)
     assert outcome.status is JudgmentStatus.UNAVAILABLE
 
 
@@ -349,10 +338,9 @@ def test_cli_judge_marks_seeded_logs(tmp_path: Path) -> None:
         PROMPT,
         RawReplyLog(writer),
         model_requested="claude-sonnet-5-5",
-        clean=simple_clean,
         seeded=True,
     )
-    judge.judge(small_posting(), make_resume(), log_dir=LOG_DIR)
+    judge.judge(small_posting(), fixture_resume(), log_dir=LOG_DIR)
     assert _log(writer, 1)["seeded"] is True
 
 
@@ -360,7 +348,7 @@ def test_cli_judge_marks_seeded_logs(tmp_path: Path) -> None:
 
 
 def _resume_doc() -> dict[str, Any]:
-    return make_resume().to_dict()
+    return fixture_resume().to_dict()
 
 
 @pytest.mark.parametrize("where", ["summary", "reason", "uncertainty"])

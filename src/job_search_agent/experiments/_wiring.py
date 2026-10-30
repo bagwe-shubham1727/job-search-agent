@@ -30,7 +30,6 @@ from job_search_agent.providers.greenhouse import GreenhouseProvider
 from job_search_agent.resume import load_verified_resume
 from job_search_agent.rule.verdict import evaluate as rule_evaluate
 from job_search_agent.sysio import SubprocessGit, SubprocessRunner
-from job_search_agent.text import clean_html
 
 
 class Wiring:
@@ -89,11 +88,6 @@ class Wiring:
             project_root=self.config.project_root,
         )
 
-    @property
-    def clean(self) -> Callable[[str], str]:
-        """``text.clean_html``."""
-        return clean_html
-
     def evaluate(self) -> Callable[[Posting], RuleVerdict]:
         """The rule with the verified résumé bound."""
         resume = self.resume
@@ -126,7 +120,6 @@ class Wiring:
             resume=self.resume,
             rawlog=RawReplyLog(self.out, repo_rel=self.config.repo_rel),
             model_requested=self.config.model.model_id,
-            clean=self.clean,
         )
 
     def fetcher(self) -> HttpFetcher:

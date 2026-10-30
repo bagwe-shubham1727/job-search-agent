@@ -87,7 +87,6 @@ def _prompt_select(w: Wiring, _args: argparse.Namespace) -> Any:  # noqa: ANN401
         w.context,
         postings=w.handcheck_postings,
         evaluate=w.evaluate(),
-        clean=w.clean,
     )
 
 
@@ -129,7 +128,7 @@ def _surfaces_prepare(w: Wiring, args: argparse.Namespace) -> Any:  # noqa: ANN4
         w.context,
         prompt=w.load_prompt("v1"),
         resume_payload=build_resume_payload(w.resume),
-        posting_payload=build_posting_payload(postings[args.posting_id], clean=w.clean),
+        posting_payload=build_posting_payload(postings[args.posting_id]),
         state_ids=[p.posting_id for p in w.handcheck_postings],
         model_id=w.config.model.model_id,
         executable=w.config.model.executable,

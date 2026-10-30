@@ -16,7 +16,7 @@ from job_search_agent.models import CompletedCommand, FetchResult
 from job_search_agent.sysio import SubprocessRunner, minimal_env
 from tests.experiments.helpers import Repo, make_repo, reply_text
 from tests.fakes import FakeRunner
-from tests.judge.doubles import handcheck_posting, make_resume, simple_clean
+from tests.tools.builders import fixture_resume, handcheck_posting
 
 MODEL = "claude-sonnet-5-5"
 SNAPSHOT = {"files": 3, "content_sha256": "b" * 64}
@@ -171,10 +171,8 @@ def _prepare(repo: Repo) -> dict[str, Any]:
     return surfaces.cmd_prepare(
         repo.ctx,
         prompt=repo.load_prompt("v1"),
-        resume_payload=build_resume_payload(make_resume()),
-        posting_payload=build_posting_payload(
-            handcheck_posting("8249901"), clean=simple_clean
-        ),
+        resume_payload=build_resume_payload(fixture_resume()),
+        posting_payload=build_posting_payload(handcheck_posting("8249901")),
         state_ids=["101", "102"],
         model_id=MODEL,
         executable="claude",

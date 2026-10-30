@@ -17,10 +17,11 @@ from job_search_agent.judge.validator import (
 )
 from job_search_agent.privacy import sensitive_values
 from job_search_agent.resume import PERSONA_LABEL
-from tests.judge.doubles import make_resume, simple_clean, small_posting, valid_reply
+from tests.judge.doubles import valid_reply
+from tests.tools.builders import fixture_resume, small_posting
 
-RESUME = build_resume_payload(make_resume())
-POSTING = build_posting_payload(small_posting(), clean=simple_clean)
+RESUME = build_resume_payload(fixture_resume())
+POSTING = build_posting_payload(small_posting())
 
 
 def _check(text: str) -> ValidJudgment | Rejection:
@@ -286,18 +287,6 @@ def test_every_bad_entry_reported() -> None:
     assert result.details == ("evidence.1.resume_path", "evidence.1.posting_path")
 
 
-def test_injected_resolver_is_used() -> None:
-    calls: list[str] = []
-
-    def resolver(document: object, path: str) -> object:
-        calls.append(path)
-        raise KeyError(path)
-
-    result = validate_reply(_dump(valid_reply()), RESUME, POSTING, resolver=resolver)
-    assert isinstance(result, Rejection)
-    assert calls == ["$.skills.languages[2]", "$.content"]
-
-
 def test_validator_never_repairs() -> None:
     for text in (
         "```json\n" + _dump(valid_reply()) + "\n```",
@@ -334,14 +323,14 @@ def test_path_findings_none_for_unparseable() -> None:
 
 
 def test_echo_check_runs_only_when_values_are_given() -> None:
-    resume = make_resume()
+    resume = fixture_resume()
     name = resume.to_dict()["personal"]["name"]
     text = _dump(valid_reply(summary=f"{name} is a fit."))
     assert isinstance(_check(text), ValidJudgment)  # no values: structural only
     result = validate_reply(
         text,
         build_resume_payload(resume),
-        build_posting_payload(small_posting(), clean=simple_clean),
+        build_posting_payload(small_posting()),
         echo_values=sensitive_values(resume),
         echo_allow=(PERSONA_LABEL,),
     )

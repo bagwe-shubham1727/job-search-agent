@@ -367,7 +367,6 @@ def test_experiment_wiring_builds_from_real_modules(project: Path) -> None:
     assert len(postings) == len(json.loads(_handcheck())["jobs"])
     verdict = wiring.evaluate()(wiring.postings_by_id()["8249901"])
     assert verdict.label in set(VerdictLabel)
-    assert wiring.clean("a &amp; <b>b</b>") == "a & b"
     assert wiring.load_prompt("v1").prompt_id
     assert wiring.judge_call().model_requested == "claude-sonnet-5-5"
     assert isinstance(wiring.fetcher(), AllowListFetcher)

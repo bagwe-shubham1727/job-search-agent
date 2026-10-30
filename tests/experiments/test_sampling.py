@@ -13,8 +13,9 @@ from job_search_agent.experiments._calls import CallRecord
 from job_search_agent.experiments._io import ExperimentError
 from job_search_agent.experiments.selection import HANDCHECK_IDS
 from job_search_agent.models import BackendErrorKind, JudgmentStatus, VerdictLabel
+from tests.conftest import REPO_ROOT
 from tests.experiments.helpers import Repo, first_reply_judge, make_repo, reply_text
-from tests.judge.doubles import REPO_ROOT, handcheck_posting
+from tests.tools.builders import handcheck_posting
 
 POSTINGS = {pid: handcheck_posting(pid) for pid in HANDCHECK_IDS}
 

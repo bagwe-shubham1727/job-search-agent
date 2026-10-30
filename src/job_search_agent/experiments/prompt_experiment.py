@@ -57,7 +57,6 @@ from job_search_agent.experiments.selection import (
     select_postings,
     validate_label_file,
 )
-from job_search_agent.judge.payload import Cleaner
 from job_search_agent.judge.prompt import PromptContract, changed_sections
 from job_search_agent.models import Posting, VerdictLabel
 from job_search_agent.sources import meta_path_for, sha256_hex
@@ -123,7 +122,6 @@ def cmd_select(
     *,
     postings: Sequence[Posting],
     evaluate: Evaluate,
-    clean: Cleaner,
 ) -> dict[str, Any]:
     """Draws the sets and writes selection, strata, worksheets and label templates.
 
@@ -131,7 +129,6 @@ def cmd_select(
         ctx: Shared dependencies.
         postings: Every posting of the hand-check raw file (parsed by WS1).
         evaluate: The rule (WS1 ``evaluate`` with the verified résumé bound).
-        clean: HTML cleaner for the worksheets.
 
     Returns:
         The written ``selection.json`` content.
@@ -184,7 +181,7 @@ def cmd_select(
     ctx.writer.write_json_atomic(SELECTION, doc)
     for set_name in SETS:
         ids = selection.ids(set_name)
-        text = render_worksheet(set_name, ids, by_id, clean)
+        text = render_worksheet(set_name, ids, by_id)
         ctx.writer.write_bytes_atomic(
             f"{OUT}/worksheets/{set_name}.md", text.encode("utf-8")
         )

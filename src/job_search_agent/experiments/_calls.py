@@ -10,7 +10,6 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict
 from job_search_agent.clock import to_eastern
 from job_search_agent.experiments.metrics import CallScore
 from job_search_agent.judge.judge import judge_posting_detailed
-from job_search_agent.judge.payload import Cleaner
 from job_search_agent.judge.prompt import PromptContract
 from job_search_agent.judge.rawlog import RawReplyLog
 from job_search_agent.judge.validator import (
@@ -75,14 +74,12 @@ class FirstReplyJudge:
         resume: The verified résumé.
         rawlog: Raw-reply log writer.
         model_requested: The pinned model ID.
-        clean: HTML cleaner (WS1's ``text.clean_html`` when ``None``).
     """
 
     backend: ModelBackend
     resume: VerifiedResume
     rawlog: RawReplyLog
     model_requested: str | None
-    clean: Cleaner | None = None
 
     def __call__(
         self, posting: Posting, prompt: PromptContract, log_dir: str
@@ -106,7 +103,6 @@ class FirstReplyJudge:
             log_dir=log_dir,
             model_requested=self.model_requested,
             retry_once=False,
-            clean=self.clean,
         )
         if not run.attempts:
             return CallRecord(

@@ -30,7 +30,7 @@ Steps:
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -46,13 +46,6 @@ from job_search_agent.strict_json import (
     reject_constant,
     reject_duplicate_keys,
 )
-
-PathResolver = Callable[[Any, str], Any]
-"""``resolve(document, path) -> value``; the default is WS1's ``jsonpath.resolve``.
-
-Must raise ``ValueError`` for a malformed path (``jsonpath.JsonPathSyntaxError``) and
-``LookupError`` for a path that does not exist (``jsonpath.PathNotFoundError``).
-"""
 
 _JSON_WHITESPACE = " \t\n\r"
 
@@ -195,13 +188,12 @@ def _check_path(
     path: str,
     document: Mapping[str, Any],
     not_found: RejectionCode,
-    resolver: PathResolver,
 ) -> RejectionCode | None:
     """Returns why ``path`` is not a real path in ``document``, or ``None``."""
     if path == "$":
         return RejectionCode.PATH_IS_ROOT
     try:
-        resolver(document, path)
+        jsonpath.resolve(document, path)
     except LookupError:
         return not_found
     except ValueError:
@@ -246,7 +238,6 @@ def validate_reply(
     resume_payload: Mapping[str, Any],
     posting_payload: Mapping[str, Any],
     *,
-    resolver: PathResolver = jsonpath.resolve,
     echo_values: Iterable[SensitiveValue] = (),
     echo_allow: Iterable[str] = (),
 ) -> ValidationResult:
@@ -256,7 +247,6 @@ def validate_reply(
         text: Claude's reply text (the CLI envelope's ``result``), unmodified.
         resume_payload: The résumé object exactly as sent in the prompt.
         posting_payload: The posting object exactly as sent in the prompt.
-        resolver: Path resolver; see ``PathResolver``.
         echo_values: Résumé values that must not appear in the free-text fields
             (step 5); empty skips the echo check.
         echo_allow: Strings allowed even if they contain such a value.
@@ -298,7 +288,7 @@ def validate_reply(
                 RejectionCode.POSTING_PATH_NOT_FOUND,
             ),
         ):
-            problem = _check_path(path, document, not_found, resolver)
+            problem = _check_path(path, document, not_found)
             if problem is not None:
                 if problem not in path_codes:
                     path_codes.append(problem)
@@ -315,8 +305,6 @@ def evidence_path_findings(
     text: str,
     resume_payload: Mapping[str, Any],
     posting_payload: Mapping[str, Any],
-    *,
-    resolver: PathResolver = jsonpath.resolve,
 ) -> PathFindings | None:
     """Measures evidence-path existence in any reply that parses as a JSON object.
 
@@ -328,7 +316,6 @@ def evidence_path_findings(
         text: The reply text.
         resume_payload: The résumé object as sent.
         posting_payload: The posting object as sent.
-        resolver: Path resolver.
 
     Returns:
         The findings, or ``None`` when the reply does not parse as a JSON object
@@ -354,13 +341,11 @@ def evidence_path_findings(
             resume_path,
             resume_payload,
             RejectionCode.RESUME_PATH_NOT_FOUND,
-            resolver,
         )
         posting_problem = _check_path(
             posting_path,
             posting_payload,
             RejectionCode.POSTING_PATH_NOT_FOUND,
-            resolver,
         )
         if resume_problem is None and posting_problem is None:
             valid += 1

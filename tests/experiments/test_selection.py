@@ -22,7 +22,6 @@ from tests.experiments.helpers import (
     make_board,
     make_verdict,
 )
-from tests.judge.doubles import simple_clean
 
 
 def test_classify_stratum_definitions() -> None:
@@ -75,7 +74,7 @@ def test_selection_fails_loudly_if_stratum_short() -> None:
 def test_worksheet_hides_rule_verdict_and_strata() -> None:
     board = make_board(DEFAULT_COUNTS)
     selection = select_postings(board.postings, board.evaluate)
-    text = render_worksheet("dev", selection.dev, board.by_id(), simple_clean)
+    text = render_worksheet("dev", selection.dev, board.by_id())
     for forbidden in (
         "MATCH\n",
         "stratum",

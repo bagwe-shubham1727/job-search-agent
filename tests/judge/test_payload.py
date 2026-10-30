@@ -12,22 +12,17 @@ from job_search_agent.judge.payload import (
     build_resume_payload,
     payload_sha256,
 )
-from tests.judge.doubles import (
-    handcheck_posting,
-    make_resume,
-    simple_clean,
-    small_posting,
-)
+from tests.tools.builders import fixture_resume, handcheck_posting, small_posting
 
 
 def test_resume_payload_excludes_personal_education_employers_comment_workauth() -> (
     None
 ):
-    payload = build_resume_payload(make_resume())
+    payload = build_resume_payload(fixture_resume())
     assert set(payload) == {"target", "skills", "experience", "projects"}
     for entry in payload["experience"] + payload["projects"]:
         assert set(entry) == {"bullets"}
-    original = make_resume().to_dict()
+    original = fixture_resume().to_dict()
     text = json.dumps(payload)
     forbidden = [
         original["personal"]["name"],
@@ -46,8 +41,8 @@ def test_resume_payload_excludes_personal_education_employers_comment_workauth()
 
 
 def test_resume_payload_preserves_indices() -> None:
-    payload = build_resume_payload(make_resume())
-    original = make_resume().to_dict()
+    payload = build_resume_payload(fixture_resume())
+    original = fixture_resume().to_dict()
     paths = [
         "$.skills.backend[4]",
         "$.skills.cloud_devops[0]",
@@ -65,11 +60,11 @@ def test_resume_payload_preserves_indices() -> None:
 
 def test_resume_payload_rejects_unverified_mapping() -> None:
     with pytest.raises(TypeError):
-        build_resume_payload(make_resume().to_dict())  # type: ignore[arg-type]
+        build_resume_payload(fixture_resume().to_dict())  # type: ignore[arg-type]
 
 
 def test_posting_payload_fields_only() -> None:
-    payload = build_posting_payload(handcheck_posting("8249901"), clean=simple_clean)
+    payload = build_posting_payload(handcheck_posting("8249901"))
     assert list(payload) == ["id", "title", "location", "content", "departments"]
     assert payload["id"] == "8249901"
     assert payload["title"] == "Software Engineer"
@@ -80,27 +75,27 @@ def test_posting_payload_fields_only() -> None:
 
 def test_posting_payload_has_no_url() -> None:
     posting = handcheck_posting("8249901")
-    payload = build_posting_payload(posting, clean=lambda s: "cleaned")
+    payload = build_posting_payload(posting)
+    assert set(payload) == {"id", "title", "location", "content", "departments"}
     text = json.dumps(payload)
-    assert "absolute_url" not in text
+    assert "absolute_url" not in text and posting.raw["absolute_url"] not in text
     assert "gh_jid" not in text
     assert "ai_opt_out" not in text
-    assert "http" not in text
 
 
 def test_posting_payload_omits_missing_location() -> None:
     posting = small_posting(location=None)
-    payload = build_posting_payload(posting, clean=simple_clean)
+    payload = build_posting_payload(posting)
     assert "location" not in payload
 
 
 def test_payload_deterministic() -> None:
-    resume_a = build_resume_payload(make_resume())
-    resume_b = build_resume_payload(make_resume())
+    resume_a = build_resume_payload(fixture_resume())
+    resume_b = build_resume_payload(fixture_resume())
     posting = handcheck_posting("8234357")
-    posting_a = build_posting_payload(posting, clean=simple_clean)
-    posting_b = build_posting_payload(posting, clean=simple_clean)
+    posting_a = build_posting_payload(posting)
+    posting_b = build_posting_payload(posting)
     assert json.dumps(resume_a) == json.dumps(resume_b)
     assert payload_sha256(resume_a, posting_a) == payload_sha256(resume_b, posting_b)
-    other = build_posting_payload(handcheck_posting("8249901"), clean=simple_clean)
+    other = build_posting_payload(handcheck_posting("8249901"))
     assert payload_sha256(resume_a, posting_a) != payload_sha256(resume_a, other)

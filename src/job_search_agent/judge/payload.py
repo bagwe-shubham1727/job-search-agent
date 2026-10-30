@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from job_search_agent.models import Posting, VerifiedResume
@@ -43,9 +43,6 @@ SKILL_KEYS: tuple[str, ...] = (
 the whole skills section, but the rule never counts it."""
 
 BULLET_SECTIONS: tuple[str, ...] = ("experience", "projects")
-
-Cleaner = Callable[[str], str]
-"""``clean_html(raw) -> text`` (CONTRACT §5 cleaning; WS1 ``text.clean_html``)."""
 
 
 class PayloadError(ValueError):
@@ -100,24 +97,20 @@ def build_resume_payload(resume: VerifiedResume) -> dict[str, Any]:
     return payload
 
 
-def build_posting_payload(
-    posting: Posting, *, clean: Cleaner | None = None
-) -> dict[str, Any]:
-    """Builds the posting object sent to Claude.
+def build_posting_payload(posting: Posting) -> dict[str, Any]:
+    """Builds the posting object sent to Claude (content cleaned per CONTRACT §5).
 
     Args:
         posting: The normalised posting.
-        clean: HTML cleaner; defaults to ``job_search_agent.text.clean_html``.
 
     Returns:
         ``{"id", "title", "location": {"name"}, "content", "departments": [{"name"}]}``
         with ``location`` omitted when the posting has no ``location.name``.
     """
-    cleaner = clean if clean is not None else clean_html
     payload: dict[str, Any] = {"id": posting.posting_id, "title": posting.title}
     if posting.location_name is not None:
         payload["location"] = {"name": posting.location_name}
-    payload["content"] = cleaner(posting.content_raw)
+    payload["content"] = clean_html(posting.content_raw)
     payload["departments"] = [{"name": name} for name in posting.department_names]
     return payload
 

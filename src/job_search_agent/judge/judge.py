@@ -22,7 +22,6 @@ from typing import Any, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
-from job_search_agent import jsonpath
 from job_search_agent.clock import format_run_id, to_eastern
 from job_search_agent.config import ModelSettings
 from job_search_agent.judge.backend import (
@@ -33,7 +32,6 @@ from job_search_agent.judge.backend import (
     UnavailableBackend,
 )
 from job_search_agent.judge.payload import (
-    Cleaner,
     build_posting_payload,
     build_resume_payload,
     payload_sha256,
@@ -47,7 +45,6 @@ from job_search_agent.judge.rawlog import (
     RawReplyLog,
 )
 from job_search_agent.judge.validator import (
-    PathResolver,
     Rejection,
     ValidationResult,
     ValidJudgment,
@@ -157,8 +154,6 @@ def judge_posting_detailed(
     log_dir: str,
     model_requested: str | None,
     retry_once: bool = True,
-    clean: Cleaner | None = None,
-    resolver: PathResolver = jsonpath.resolve,
     seeded: bool | None = None,
 ) -> JudgeRun:
     """Judges one posting and returns the outcome plus every attempt.
@@ -173,8 +168,6 @@ def judge_posting_detailed(
         model_requested: The model ID asked for (recorded per call).
         retry_once: Retry once after a validation failure (pipeline); experiments
             pass ``False``.
-        clean: HTML cleaner for the posting payload (defaults to WS1's).
-        resolver: Path resolver for the validator.
         seeded: Copied into each raw log file when not ``None``.
 
     Returns:
@@ -191,12 +184,11 @@ def judge_posting_detailed(
             prompt, posting, model_requested, availability.reason or "unavailable"
         )
     resume_payload = build_resume_payload(resume)
-    posting_payload = build_posting_payload(posting, clean=clean)
+    posting_payload = build_posting_payload(posting)
     call = _Call(
         text=prompt.render(render_json(resume_payload), render_json(posting_payload)),
         resume_payload=resume_payload,
         posting_payload=posting_payload,
-        resolver=resolver,
         echo_values=sensitive_values(resume),
         echo_allow=echo_allow_list(resume_payload),
     )
@@ -232,7 +224,6 @@ class _Call:
     text: str
     resume_payload: Mapping[str, Any]
     posting_payload: Mapping[str, Any]
-    resolver: PathResolver
     echo_values: tuple[SensitiveValue, ...]
     echo_allow: tuple[str, ...]
 
@@ -244,7 +235,6 @@ class _Call:
             reply.result_text,
             self.resume_payload,
             self.posting_payload,
-            resolver=self.resolver,
             echo_values=self.echo_values,
             echo_allow=self.echo_allow,
         )
@@ -363,53 +353,6 @@ def _final_judgment(
     return ModelJudgment(status=JudgmentStatus.ERROR, diagnostic=diagnostic)
 
 
-def judge_posting(
-    backend: ModelBackend,
-    prompt: PromptContract,
-    posting: Posting,
-    resume: VerifiedResume,
-    rawlog: RawReplyLog,
-    *,
-    log_dir: str,
-    model_requested: str | None,
-    retry_once: bool = True,
-    clean: Cleaner | None = None,
-    resolver: PathResolver = jsonpath.resolve,
-    seeded: bool | None = None,
-) -> JudgmentOutcome:
-    """Judges one posting (see ``judge_posting_detailed``) and returns the outcome.
-
-    Args:
-        backend: The model backend.
-        prompt: The loaded prompt contract.
-        posting: The posting to judge.
-        resume: The verified résumé.
-        rawlog: Where raw replies are written.
-        log_dir: Data-root-relative directory for this posting's attempt files.
-        model_requested: The model ID asked for.
-        retry_once: Retry once after a validation failure.
-        clean: HTML cleaner for the posting payload.
-        resolver: Path resolver for the validator.
-        seeded: Copied into each raw log file when not ``None`` (replay runs).
-
-    Returns:
-        The judgment outcome.
-    """
-    return judge_posting_detailed(
-        backend,
-        prompt,
-        posting,
-        resume,
-        rawlog,
-        log_dir=log_dir,
-        model_requested=model_requested,
-        retry_once=retry_once,
-        clean=clean,
-        resolver=resolver,
-        seeded=seeded,
-    ).outcome
-
-
 class CliJudge:
     """``ports.Judge`` adapter used by the pipeline (WS3).
 
@@ -418,8 +361,6 @@ class CliJudge:
         prompt: The prompt contract (``[model].prompt_version``).
         rawlog: Raw-reply log writer.
         model_requested: The pinned model ID, recorded per call.
-        clean: HTML cleaner (defaults to WS1's ``text.clean_html``).
-        resolver: Validator path resolver.
         seeded: Written into every raw log file when not ``None`` (``True`` for
             replay runs, so the seeded label reaches every file).
     """
@@ -431,8 +372,6 @@ class CliJudge:
         rawlog: RawReplyLog,
         *,
         model_requested: str | None,
-        clean: Cleaner | None = None,
-        resolver: PathResolver = jsonpath.resolve,
         seeded: bool | None = None,
     ) -> None:
         self._backend = backend
@@ -440,8 +379,6 @@ class CliJudge:
         self._prompt = prompt
         self._rawlog = rawlog
         self._model_requested = model_requested
-        self._clean = clean
-        self._resolver = resolver
 
     def judge(
         self, posting: Posting, resume: VerifiedResume, *, log_dir: str
@@ -456,7 +393,7 @@ class CliJudge:
         Returns:
             The outcome.
         """
-        return judge_posting(
+        return judge_posting_detailed(
             self._backend,
             self._prompt,
             posting,
@@ -465,10 +402,8 @@ class CliJudge:
             log_dir=log_dir,
             model_requested=self._model_requested,
             retry_once=True,
-            clean=self._clean,
-            resolver=self._resolver,
             seeded=self._seeded,
-        )
+        ).outcome
 
 
 def build_backend(
@@ -514,7 +449,6 @@ def build_judge(
     make_empty_dir: MakeEmptyDir,
     clock: Clock,
     repo_rel: Callable[[str], str],
-    clean: Cleaner | None = None,
     seeded: bool | None = None,
     events: EventSink | None = None,
 ) -> CliJudge:
@@ -528,7 +462,6 @@ def build_judge(
         make_empty_dir: ``OutputRoot.make_empty_dir``.
         clock: The clock.
         repo_rel: ``AgentConfig.repo_rel``.
-        clean: HTML cleaner (defaults to WS1's).
         seeded: Passed to ``CliJudge`` (``True`` for replay runs).
         events: The run's event log, for backend events.
 
@@ -547,7 +480,6 @@ def build_judge(
         prompt,
         RawReplyLog(writer, repo_rel=repo_rel),
         model_requested=settings.model_id if settings.backend != "none" else None,
-        clean=clean,
         seeded=seeded,
     )
 
@@ -684,7 +616,6 @@ __all__ = [
     "ProbeResult",
     "build_backend",
     "build_judge",
-    "judge_posting",
     "judge_posting_detailed",
     "probe_model",
 ]
