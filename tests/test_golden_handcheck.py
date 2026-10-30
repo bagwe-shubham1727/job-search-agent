@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 import pytest
 
+from job_search_agent import jsonpath
 from job_search_agent.evidence_validator import validate_rule_evidence
 from job_search_agent.models import Gate, LocationLabel, RuleVerdict, VerdictLabel
 from job_search_agent.rule.verdict import evaluate
@@ -130,6 +131,17 @@ def test_handcheck_index_and_id(case: HandCheck, raw_handcheck: RawHandcheck) ->
     parsed = handcheck_board().postings[case.index]
     assert parsed.index == case.index
     assert parsed.posting_id == case.posting_id
+
+
+@pytest.mark.parametrize("case", CASES, ids=IDS)
+def test_posting_paths_relative_to_posting(
+    case: HandCheck, raw_handcheck: RawHandcheck
+) -> None:
+    """§5: record paths resolve against the posting; hand checks add ``$.jobs[i]``."""
+    posting_obj = jsonpath.resolve(raw_handcheck.data, f"$.jobs[{case.index}]")
+    for entry in _verdict(case).evidence:
+        assert jsonpath.exists(posting_obj, entry.posting_path)
+        assert not jsonpath.exists(raw_handcheck.data, entry.posting_path)
 
 
 @pytest.mark.parametrize("case", CASES, ids=IDS)

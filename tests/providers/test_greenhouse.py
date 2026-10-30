@@ -14,7 +14,7 @@ from job_search_agent.errors import ConfigError, InvalidResponse
 from job_search_agent.models import DataQualityCode, ParsedBoard, Severity
 from job_search_agent.providers import get_provider
 from job_search_agent.providers.greenhouse import GreenhouseProvider
-from tests.conftest import RawHandcheck
+from tests.conftest import REPO_ROOT, RawHandcheck
 
 
 def _job(**fields: Any) -> dict[str, Any]:
@@ -244,3 +244,13 @@ def test_provider_name_and_registry() -> None:
 def test_unknown_provider_raises_config_error() -> None:
     with pytest.raises(ConfigError):
         get_provider("lever")
+
+
+def test_no_count_constant() -> None:
+    """§2: the posting count is read from the response, never hard-coded."""
+    offenders = [
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in (REPO_ROOT / "src").rglob("*.py")
+        if "734" in path.read_text(encoding="utf-8")
+    ]
+    assert offenders == []
