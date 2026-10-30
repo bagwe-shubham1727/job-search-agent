@@ -81,3 +81,24 @@ files, pytest 96 passed / 1 skipped (live).
 
 **21:25 WS1–WS4 launched** in parallel git worktrees with disjoint file ownership: rule core, policy edges,
 orchestration, judge/experiments.
+
+**21:30 WS4 network failure.** The first WS4 agent died on `ENOTFOUND` (API unreachable) before writing anything. It
+was relaunched fresh at 21:33 ET.
+
+**21:42 Merge WS2** (`e57a458`): résumé gate, fsio write policy, allow-list HTTP, privacy audit. Claude re-ran the gate
+on main: 261 passed, 1 skipped.
+
+**21:46 Merge WS3** (`138bcff`): state, status, sources, events, pipeline, report, CLI. Gate: 383 passed. `jsa doctor`
+passed every check against the real résumé gate.
+
+**21:50 Merge WS1** (`e867b51`): provider, four-gate rule, evidence validator. Gate: 758 passed; meta-test 3 passed.
+- Wrong version A (title-only) was killed by 9 contract tests and B (substring counting) by 12.
+- All five §13 hand checks reproduced exactly.
+- `jsa rule --raw ... --id 8127182` gave NO_MATCH, failed gate SKILLS, evidence Java only.
+- Location labels over the 734 hand-check postings were 335 US_BASED, 332 NON_US, 67 NOT_ESTABLISHED. Claude's earlier
+  throwaway script gave 339/332/63; the difference is the `Tor`/`Toro` non-US entries added afterwards.
+
+**21:52 Run 1, live baseline** (`30304b7`): `uv run jsa run --model-backend none` at clean commit `e867b51`.
+- Status BASELINE: 736 fetched, 736 unique valid IDs, new 0, state saved.
+- The board had 734 postings at 18:41 ET, so it had already changed.
+- Raw sha256 `8f02cbe2…`. `verify-evidence` OK; `audit-privacy` 0 findings.
