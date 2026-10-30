@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 
 from job_search_agent.errors import (
+    ConfigError,
     PathRejected,
     ResumeRefused,
     RunIdTaken,
@@ -38,6 +39,8 @@ from job_search_agent.models import (
     RunReport,
     RunStatus,
     SeenState,
+    SourceKind,
+    SourceResult,
     VerifiedResume,
 )
 from job_search_agent.pipeline import run_once
@@ -830,3 +833,17 @@ def test_symlinked_state_file_is_refused(h: Harness, tmp_path: Path) -> None:
     assert info.value.reason == "symlink"
     assert outside.read_bytes() == before
     assert h.transports[-1].requests == []
+
+
+# --- review nit: a body without provenance is an explicit error ------------------
+
+
+class _NoProvenanceReplay:
+    def obtain(self) -> SourceResult:
+        return SourceResult(kind=SourceKind.REPLAY, body=BODY, sha256=None, error=None)
+
+
+def test_body_without_raw_ref_is_a_config_error_not_an_assert(h: Harness) -> None:
+    live(h)
+    with pytest.raises(ConfigError, match="raw"):
+        run_once(h.deps(_NoProvenanceReplay(), seeded=True))

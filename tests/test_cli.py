@@ -18,7 +18,6 @@ from typing import Any
 import pytest
 
 from job_search_agent import cli
-from job_search_agent.clock import SystemClock
 from job_search_agent.config import AgentConfig, ConfigOverrides, load_config
 from job_search_agent.errors import ConfigError, ResumeRefused
 from job_search_agent.fsio import OutputRoot, create_output_root
@@ -229,17 +228,20 @@ def test_model_backend_none_override_reaches_config(
     assert seen == {"backend": "none", "replay": None}
 
 
-def test_judge_backend_none_is_honest_unavailable(project: Path) -> None:
+def test_build_run_deps_backend_none_is_honest_unavailable(project: Path) -> None:
     cfg = load_config(project, overrides=ConfigOverrides(model_backend="none"))
-    judge, reason = cli._judge(
-        cfg,
-        LocalOutputRoot(cfg.data_dir),
-        SystemClock(),
-        FakeRunner(),
-        seeded=False,
-        read=Path.read_bytes,
-    )
-    assert judge is None and reason == "backend_none"
+    deps = cli.build_run_deps(cfg, project.parent.parent / HANDCHECK_RAW_REL)
+    assert deps.judge is None and deps.unavailable_reason == "backend_none"
+
+
+def test_build_run_deps_real_judge_has_no_unavailable_reason(project: Path) -> None:
+    root = project.parent.parent
+    (root / "prompts").mkdir()
+    shutil.copyfile(REPO_ROOT / "prompts/judge.v1.md", root / "prompts/judge.v1.md")
+    cfg = load_config(project, overrides=ConfigOverrides(model_backend="claude-cli"))
+    deps = cli.build_run_deps(cfg, root / HANDCHECK_RAW_REL, runner=FakeRunner())
+    assert deps.judge is not None
+    assert deps.unavailable_reason is None
 
 
 def test_build_run_deps_replay_is_seeded_and_never_live(

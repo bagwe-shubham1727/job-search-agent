@@ -15,6 +15,12 @@ A title passes when it contains a family *phrase* and no excluded marker:
   either side) of the lowercased title. ``sr.`` is covered by ``sr``. ``SWE I`` and
   ``SWE II`` are "allowed" only in the sense that ``i`` and ``ii`` are not markers;
   a family phrase is still required (A3).
+
+**Word boundaries are ASCII-only.** "No letter or digit" means no ``[a-z0-9]``
+character (the title is lowercased first). A non-ASCII letter or digit is treated as
+a boundary, so ``ébackend engineer`` would still contain the phrase. This is
+deliberate and documented rather than changed: the contract's golden tests pin the
+current matching, and the board's titles are ASCII.
 """
 
 from __future__ import annotations

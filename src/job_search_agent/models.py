@@ -100,7 +100,7 @@ class RunStatus(StrEnum):
 
 
 class FetchKind(StrEnum):
-    """Coarse outcome of obtaining and parsing the board, input to ``decide_status``."""
+    """Coarse outcome of obtaining and parsing the board (``status.explain_status``)."""
 
     OK = "OK"
     FAILED = "FAILED"

@@ -6,10 +6,10 @@ from typing import Any
 
 import pytest
 
+from job_search_agent import status as status_module
 from job_search_agent.models import FetchKind, RunStatus
 from job_search_agent.status import (
     NOTE_BASELINE_STATE_NOT_SAVED,
-    decide_status,
     explain_status,
 )
 
@@ -26,7 +26,11 @@ OK: dict[str, Any] = {
 
 
 def status(**changes: Any) -> RunStatus:
-    return decide_status(**{**OK, **changes})
+    return explain_status(**{**OK, **changes}).status
+
+
+def test_explain_status_is_the_one_public_decision() -> None:
+    assert not hasattr(status_module, "decide_status")
 
 
 @pytest.mark.parametrize(

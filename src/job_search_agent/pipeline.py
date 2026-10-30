@@ -174,7 +174,8 @@ class RunDeps:
         events: The run's event log; attached to ``events.jsonl`` by the run.
         seeded: True for a replay; the run then uses ``data/seeded`` only.
         read_repo_file: Reads a saved raw file by repo-relative path (A26 retries).
-        unavailable_reason: ``unavailable_reason`` recorded when ``judge`` is None.
+        unavailable_reason: ``unavailable_reason`` recorded when ``judge`` is None;
+            ``None`` when a real judge is wired.
         terminal: Receives the privacy-safe terminal summary, if given.
     """
 
@@ -191,7 +192,7 @@ class RunDeps:
     events: EventLog
     seeded: bool
     read_repo_file: RepoReader
-    unavailable_reason: str = "backend_none"
+    unavailable_reason: str | None = "backend_none"
     terminal: Callable[[str], None] | None = None
 
 
@@ -350,7 +351,8 @@ class _Pipeline:
         )
         if board.is_empty:
             return self._finish(run, src, raw_ref, FetchKind.EMPTY, board=board)
-        assert raw_ref is not None  # noqa: S101 - a body always yields a raw ref
+        if raw_ref is None:
+            raise ConfigError("source returned a body without a raw reference")
         return self._process(run, src, raw_ref, board, resume, fetched_at)
 
     def _load_prior(self) -> tuple[bytes | None, SeenState | None]:
@@ -454,7 +456,8 @@ class _Pipeline:
     ) -> JudgmentOutcome:
         if self.d.judge is None:
             outcome = JudgmentOutcome(
-                posting.posting_id, _unavailable(self.d.unavailable_reason)
+                posting.posting_id,
+                _unavailable(self.d.unavailable_reason or "unavailable"),
             )
         else:
             outcome = self._call_judge(self.d.judge, run, posting, resume)

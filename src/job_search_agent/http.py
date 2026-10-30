@@ -325,6 +325,17 @@ class AllowListFetcher:
         return target
 
     def _read_body(self, response: httpx.Response, deadline: float) -> bytes:
+        """Reads the body, enforcing ``max_bytes`` and the overall deadline.
+
+        ``Content-Length`` is the size of the *encoded* body (after any
+        ``Content-Encoding`` such as gzip), so a declared length over the cap is an
+        early refusal only. The cap itself applies to the *decoded* bytes that
+        ``iter_bytes`` yields, which are what is saved and parsed; a small
+        compressed body that inflates past the cap is still refused.
+
+        Raises:
+            _Failure: ``SIZE_CAP`` or ``TIMEOUT``.
+        """
         declared = response.headers.get("content-length")
         if (
             declared is not None

@@ -14,6 +14,12 @@ enforces that for every write the agent makes:
   moved over the target with ``os.replace``, then the directory is fsynced. A
   failure at any step leaves the previous file intact and removes the temporary.
 
+Permissions: every file the agent writes under the data root is created ``0o600``
+and every directory it creates ``0o700`` (before the umask), so state files and raw
+model replies are private to the owner. Applying this to all of ``data/`` is simpler
+than per-file modes and safe: only this user's ``jsa`` and ``claude`` processes read
+these files, and git records only the executable bit, not read permissions.
+
 ``OutputRoot.lock`` takes an exclusive, non-blocking ``flock`` on a lock file (the
 pipeline uses ``data/<live|seeded>/.lock``). Lock files are empty, git-ignored
 (``data/*/.lock``) and are not evidence: nothing reads their contents.
@@ -52,8 +58,10 @@ DEFAULT_READ_ROOTS: Final = (
 
 _DIR_FLAGS: Final = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
 _TMP_PREFIX: Final = ".tmp-"
-_FILE_MODE: Final = 0o644
-_DIR_MODE: Final = 0o755
+_FILE_MODE: Final = 0o600
+"""Every file under the data root is owner-only (state, raw replies, reports)."""
+_DIR_MODE: Final = 0o700
+"""Every directory ``OutputRoot`` creates is owner-only."""
 
 
 def is_within(child: Path, parent: Path) -> bool:

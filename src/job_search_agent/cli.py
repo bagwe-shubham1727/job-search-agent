@@ -188,7 +188,7 @@ def _judge(
     seeded: bool,
     read: Callable[[Path], bytes],
     events: EventLog | None = None,
-) -> tuple[Judge | None, str]:
+) -> tuple[Judge | None, str | None]:
     """Builds the Claude judge, or explains why judgments will be ``UNAVAILABLE``.
 
     Args:
@@ -201,9 +201,10 @@ def _judge(
         events: The run's event log (backend cleanup events).
 
     Returns:
-        ``(judge, unavailable_reason)``; ``judge`` is ``None`` for backend ``none``
-        (never a silent fallback: the records say UNAVAILABLE with this reason and
-        the run is PARTIAL_FAILURE).
+        ``(judge, unavailable_reason)``. Backend ``none`` gives ``(None,
+        "backend_none")`` (never a silent fallback: the records say UNAVAILABLE with
+        this reason and the run is PARTIAL_FAILURE); a real judge gives
+        ``(judge, None)``.
     """
     if cfg.model.backend == "none":
         return None, "backend_none"
@@ -219,7 +220,7 @@ def _judge(
         seeded=seeded,
         events=events,
     )
-    return judge, "backend_none"
+    return judge, None
 
 
 def _repo_rel(cfg: AgentConfig, path: Path) -> str:

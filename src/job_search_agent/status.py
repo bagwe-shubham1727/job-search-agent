@@ -1,5 +1,8 @@
 """Run-status decision: the PLAN §1.4 precedence table as one pure function.
 
+``explain_status`` is the one public decision; it returns the status and the notes
+that explain it (callers needing only the status read ``.status``).
+
 CONTRACT §9 and §15: a fetch failure, an invalid response or an empty response is
 never ``SUCCESS_NO_NEW``. A model judgment that is not ``VALID`` (including
 ``UNAVAILABLE``, A25), a pending judgment left unresolved, a data-quality error on a
@@ -106,44 +109,3 @@ def explain_status(
     if new_count > 0:
         return StatusDecision(RunStatus.SUCCESS_WITH_NEW)
     return StatusDecision(RunStatus.SUCCESS_NO_NEW)
-
-
-def decide_status(
-    *,
-    fetch: FetchKind,
-    is_baseline: bool,
-    new_count: int,
-    failed_judgments: int,
-    unresolved_pending: int,
-    data_quality_errors: int,
-    records_saved: bool,
-    state_saved: bool,
-    rule_evidence_errors: int = 0,
-) -> RunStatus:
-    """Returns the run status by the PLAN §1.4 precedence (see ``explain_status``).
-
-    Args:
-        fetch: Outcome of obtaining and parsing the board.
-        is_baseline: True when no prior state existed.
-        new_count: Number of new posting IDs.
-        failed_judgments: New or retried judgments that are not ``VALID``.
-        unresolved_pending: Pending IDs still pending after this run.
-        data_quality_errors: ``ERROR``-severity data-quality issues.
-        records_saved: Whether the record files were written.
-        state_saved: Whether the state file was written.
-        rule_evidence_errors: Records whose rule evidence failed validation.
-
-    Returns:
-        The run status.
-    """
-    return explain_status(
-        fetch=fetch,
-        is_baseline=is_baseline,
-        new_count=new_count,
-        failed_judgments=failed_judgments,
-        unresolved_pending=unresolved_pending,
-        data_quality_errors=data_quality_errors,
-        records_saved=records_saved,
-        state_saved=state_saved,
-        rule_evidence_errors=rule_evidence_errors,
-    ).status

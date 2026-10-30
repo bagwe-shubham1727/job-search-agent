@@ -131,6 +131,9 @@ def evaluate_with(posting: Posting, inputs: RuleInputs) -> RuleVerdict:
     title = title_check(posting.title, inputs.roles)
     evidence = match_skills(posting, inputs.skills)
     exclusions = find_exclusions(posting)
+    # A30: the location evidence must be a real path. With neither $.location.name
+    # nor $.content, $.id is the only one left; it carries no location or content,
+    # and the provider's MISSING_LOCATION issue says so.
     fallback = CONTENT_PATH if "content" in posting.raw else "$.id"
     location = classify_location(
         posting.location_name,

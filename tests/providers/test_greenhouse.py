@@ -254,3 +254,12 @@ def test_no_count_constant() -> None:
         if "734" in path.read_text(encoding="utf-8")
     ]
     assert offenders == []
+
+
+def test_missing_location_and_content_explains_id_evidence() -> None:
+    """A30: the rule then cites ``$.id``; the data-quality issue says why."""
+    board = _parse(_board([{"id": 9}, {"id": 10, "content": "x"}]))
+    no_content, with_content = board.data_quality
+    assert no_content.code is with_content.code is DataQualityCode.MISSING_LOCATION
+    assert "$.content" in no_content.detail and "$.id" in no_content.detail
+    assert with_content.detail == "$.location.name is absent"

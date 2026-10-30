@@ -22,6 +22,11 @@ Matching (§6.2): every special case is keyed by the exact résumé term.
   cleanup (which collapses whitespace runs).
 
 Every special-case form also needs no letter or digit directly before or after it.
+
+**Word boundaries are ASCII-only.** "No letter or digit" means no ``[A-Za-z0-9]``
+character; a non-ASCII letter or digit (``é``, ``٣``) counts as a boundary, so
+``éJava`` still matches ``Java``. This is deliberate and documented rather than
+changed: the contract's golden tests pin the current matching.
 """
 
 from __future__ import annotations

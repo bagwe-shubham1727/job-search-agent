@@ -287,7 +287,10 @@ def classify_location(
             rescue phrases.
         fallback_path: The evidence path for an absent location that is not
             rescued; the caller passes a path that exists (``$.content`` if the
-            posting has one, otherwise ``$.id``).
+            posting has one, otherwise ``$.id``). Reading A30: ``$.id`` is cited
+            only so the evidence is always a real path; it holds neither a
+            location nor content, and the provider records that as the
+            ``MISSING_LOCATION`` data-quality issue's detail.
 
     Returns:
         The label, the source paths it rests on and a short reason.

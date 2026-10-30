@@ -181,6 +181,10 @@ def _location_name(
 ) -> str | None:
     """Reads ``$.location.name``; ``None`` when it is absent or not a string (A30).
 
+    An absent name is a ``MISSING_LOCATION`` warning. When ``$.content`` is absent
+    too, its detail says so: the rule's location evidence then cites ``$.id``, which
+    is a real path but holds neither a location nor content.
+
     A present but non-string name (``null`` included) is a ``WRONG_FIELD_TYPE``
     warning: the rule must never cite ``$.location.name`` as evidence for a value
     that is not a location string.
@@ -196,12 +200,19 @@ def _location_name(
     location = job.get("location")
     if not isinstance(location, dict) or "name" not in location:
         index, posting_id = ctx
+        detail = "$.location.name is absent"
+        if "content" not in job:
+            # A30: neither path exists, so the rule's location evidence is $.id.
+            detail = (
+                "$.location.name and $.content are absent; the location check "
+                "cites $.id as its only real path (A30)"
+            )
         out.add(
             DataQualityCode.MISSING_LOCATION,
             Severity.WARNING,
             index=index,
             posting_id=posting_id,
-            detail="$.location.name is absent",
+            detail=detail,
         )
         return None
     name = location["name"]

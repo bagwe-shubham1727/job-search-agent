@@ -51,6 +51,10 @@ _POSTING_PATH: Final = re.compile(
     r"\$\.title|\$\.content|\$\.departments\[(?:0|[1-9][0-9]*)\]\.name"
 )
 _LOCATION_PATHS: Final = frozenset({"$.location.name", "$.content", "$.id"})
+"""Paths a location check may cite. ``$.id`` is allowed only for reading A30: when a
+posting has neither ``$.location.name`` nor ``$.content``, the evidence must still be
+a real path, so it cites ``$.id`` (which holds no location or content; the provider's
+``MISSING_LOCATION`` data-quality issue records that)."""
 
 
 def _resolve(document: Mapping[str, Any], path: str) -> tuple[bool, Any]:

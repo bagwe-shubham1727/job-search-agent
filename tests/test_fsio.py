@@ -323,3 +323,22 @@ def test_relative_within_is_the_single_containment_check(tmp_path: Path) -> None
     with pytest.raises(PathRejected) as info:
         relative_within("data/\x00", root)
     assert _reason(info) == "nul"
+
+
+# --- review nit: data/ is private to the owner ------------------------------------
+
+
+def test_files_and_dirs_under_data_are_owner_only(tmp_root: OutputRoot) -> None:
+    old = os.umask(0o022)
+    try:
+        tmp_root.write_json_atomic("live/runs/r1/state.json", {"a": 1})
+        tmp_root.append_jsonl("live/runs/r1/events.jsonl", {"e": 1})
+        tmp_root.make_empty_dir("tmp/claude-x")
+        with tmp_root.lock("live/.lock"):
+            pass
+    finally:
+        os.umask(old)
+    for rel in ("live/runs/r1/state.json", "live/runs/r1/events.jsonl", "live/.lock"):
+        assert (tmp_root.root / rel).stat().st_mode & 0o777 == 0o600, rel
+    for rel in ("live", "live/runs", "live/runs/r1", "tmp/claude-x"):
+        assert (tmp_root.root / rel).stat().st_mode & 0o777 == 0o700, rel
