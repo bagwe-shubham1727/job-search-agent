@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from job_search_agent.errors import StateCorrupt
+from job_search_agent.fsio import OutputRoot
 from job_search_agent.models import (
     JudgmentDiagnostic,
     JudgmentOutcome,
@@ -21,8 +22,8 @@ from job_search_agent.models import (
 from job_search_agent.state import (
     advance,
     drop_pending,
-    load_state,
     parse_state,
+    read_state_rel,
     sort_ids,
     state_to_bytes,
 )
@@ -93,7 +94,7 @@ def baseline() -> SeenState:
 
 
 def test_absent_state_is_none(tmp_path: Path) -> None:
-    assert load_state(tmp_path / "state.json") is None
+    assert read_state_rel("live/state.json", OutputRoot(tmp_path).read_bytes) is None
 
 
 @pytest.mark.parametrize(
@@ -111,7 +112,7 @@ def test_corrupt_state_raises_not_baseline(
     path = tmp_path / "state.json"
     path.write_bytes(content)
     with pytest.raises(StateCorrupt) as info:
-        load_state(path)
+        parse_state(path.read_bytes())
     assert info.value.reason == reason
     assert path.read_bytes() == content
 

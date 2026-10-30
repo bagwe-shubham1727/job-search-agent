@@ -20,7 +20,6 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Iterable, Mapping, Set
 from datetime import datetime
-from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -48,29 +47,12 @@ def sort_ids(ids: Iterable[str]) -> list[str]:
     return sorted(set(ids), key=lambda pid: (len(pid), pid))
 
 
-def read_state_bytes(
-    path: Path, *, read_bytes: Callable[[Path], bytes] = Path.read_bytes
-) -> bytes | None:
-    """Reads the raw state bytes.
-
-    Args:
-        path: The state file.
-        read_bytes: Reader (injectable for tests).
-
-    Returns:
-        The exact bytes, or ``None`` when the file does not exist.
-    """
-    try:
-        return read_bytes(path)
-    except FileNotFoundError:
-        return None
-
-
 def read_state_rel(rel: str, read_bytes: Callable[[str], bytes]) -> bytes | None:
     """Reads the raw state bytes through the write root's path policy.
 
-    The pipeline and ``jsa pending drop`` pass ``OutputRoot.read_bytes``, so a
-    symlinked state file (or parent directory) is refused, not followed.
+    Every reader (the pipeline, ``jsa doctor`` and ``jsa pending``) passes
+    ``OutputRoot.read_bytes``, so a symlinked state file (or parent directory) is
+    refused, not followed.
 
     Args:
         rel: The state file relative to the data dir, e.g. ``"live/state.json"``.
@@ -115,26 +97,6 @@ def parse_state(data: bytes) -> SeenState:
         return SeenState.model_validate(obj)
     except ValidationError as exc:
         raise StateCorrupt("integrity") from exc
-
-
-def load_state(
-    path: Path, *, read_bytes: Callable[[Path], bytes] = Path.read_bytes
-) -> SeenState | None:
-    """Loads the state file.
-
-    Args:
-        path: The state file.
-        read_bytes: Reader (injectable for tests).
-
-    Returns:
-        The state, or ``None`` only when the file is absent (the next run is a
-        baseline).
-
-    Raises:
-        StateCorrupt: The file exists but is not a valid state.
-    """
-    data = read_state_bytes(path, read_bytes=read_bytes)
-    return None if data is None else parse_state(data)
 
 
 def state_to_bytes(state: SeenState) -> bytes:

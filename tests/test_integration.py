@@ -453,3 +453,32 @@ def test_exp_wiring_honours_data_dir(project: Path) -> None:
         overrides=ConfigOverrides(data_dir="data/scratch"),
     )
     assert wiring.context.data_dir == "data/scratch"
+
+
+# --- (g) every state reader refuses a symlinked state file ----------------------
+
+
+def test_symlinked_state_is_refused_by_doctor_and_pending_list(
+    project: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    router = Router(git=_run_git(), claude=FakeRunner([CLAUDE_VERSION]))
+    monkeypatch.setattr(cli, "SubprocessRunner", lambda: router)
+    config = str(project / "config/agent.toml")
+    raw = str(project / HANDCHECK_RAW_REL)
+    assert cli.main(["--config", config, "run", "--replay", raw]) == 0
+    state = project / "data" / "seeded" / "state.json"
+    # The target stays inside data/, so only the file policy (not the config's
+    # resolve-inside-data.dir check) can refuse it.
+    target = project / "data" / "other-state.json"
+    target.write_bytes(state.read_bytes())  # a valid state, if it were followed
+    state.unlink()
+    state.symlink_to(target)
+    capsys.readouterr()
+
+    code = cli.main(["--config", config, "doctor"])
+    out, err = capsys.readouterr()
+    assert code == int(ExitCode.CONFIG_ERROR), err
+    assert "[FAIL] seeded state: seeded/state.json: refused (symlink)" in out
+    argv = ["--config", config, "pending", "list", "--data", "seeded"]
+    assert cli.main(argv) == int(ExitCode.CONFIG_ERROR)
+    assert "pending" not in capsys.readouterr().out

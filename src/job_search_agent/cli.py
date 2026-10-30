@@ -54,13 +54,19 @@ from job_search_agent.errors import (
 from job_search_agent.events import EventLog
 from job_search_agent.evidence_validator import validate_rule_evidence
 from job_search_agent.experiments.cli import register as register_experiments
-from job_search_agent.fsio import ReadPolicy, create_output_root, relative_within
+from job_search_agent.fsio import (
+    OutputRoot,
+    ReadPolicy,
+    create_output_root,
+    relative_within,
+)
 from job_search_agent.http import build_fetcher_from_settings
 from job_search_agent.judge.judge import build_backend, build_judge, probe_model
 from job_search_agent.judge.prompt import load_prompt
 from job_search_agent.models import (
     ExitCode,
     RunReport,
+    SeenState,
     VerifiedResume,
     exit_code_for_status,
 )
@@ -94,7 +100,6 @@ from job_search_agent.sources import (
 )
 from job_search_agent.state import (
     drop_pending,
-    load_state,
     parse_state,
     read_state_rel,
     state_to_bytes,
@@ -386,13 +391,31 @@ def _check_gitignore(cfg: AgentConfig) -> Check:
     return Check("gitignore", "OK", "required rules present")
 
 
+def _read_state(cfg: AgentConfig, rel: str) -> SeenState | None:
+    """Reads a state file through ``OutputRoot`` (a symlink is refused, not followed).
+
+    Returns:
+        The state, or ``None`` when it (or the data directory) is absent.
+
+    Raises:
+        PathRejected: The path violates the file policy (e.g. a symlink).
+        StateCorrupt: The file exists but is not a valid state.
+    """
+    if not cfg.data_dir.is_dir():
+        return None
+    data = read_state_rel(rel, OutputRoot(cfg.data_dir).read_bytes)
+    return None if data is None else parse_state(data)
+
+
 def _check_state(cfg: AgentConfig, *, seeded: bool) -> Check:
     rel = cfg.state_rel(seeded=seeded)
     name = "seeded state" if seeded else "live state"
     try:
-        state = load_state(cfg.data_dir / rel)
+        state = _read_state(cfg, rel)
     except StateCorrupt as exc:
         return Check(name, "FAIL", f"{rel}: corrupt ({exc.reason})")
+    except PathRejected as exc:
+        return Check(name, "FAIL", f"{rel}: refused ({exc.reason})")
     if state is None:
         return Check(name, "OK", f"{rel}: absent (next run is a baseline)")
     return Check(
@@ -491,7 +514,7 @@ def cmd_pending_list(args: argparse.Namespace) -> int:
     """``jsa pending list [--data live|seeded]``."""
     cfg = _config(args)
     rel = cfg.state_rel(seeded=args.data == "seeded")
-    state = load_state(cfg.data_dir / rel)
+    state = _read_state(cfg, rel)
     if state is None:
         print(f"{rel}: absent (no baseline yet)")
         return int(ExitCode.OK)

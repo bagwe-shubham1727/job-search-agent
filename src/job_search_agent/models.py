@@ -712,7 +712,7 @@ class SeenState(FrozenModel):
     """The state file (CONTRACT §10). Live and seeded runs keep separate files.
 
     Integrity checks run on load, so a hand-edited or truncated file fails validation
-    (``state.load_state`` maps that to ``StateCorrupt``) instead of silently becoming a
+    (``state.parse_state`` maps that to ``StateCorrupt``) instead of silently becoming a
     new baseline.
 
     Raises:
