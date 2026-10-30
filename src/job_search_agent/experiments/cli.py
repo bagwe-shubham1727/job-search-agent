@@ -117,7 +117,8 @@ def _prompt_score(w: Wiring, _args: argparse.Namespace) -> Any:  # noqa: ANN401
 def _repo_snapshot(w: Wiring) -> Callable[[], dict[str, Any]]:
     root = w.config.project_root
     env = w.child_env()
-    return lambda: surfaces.git_repo_snapshot(w.runner, root, env)
+    exclude = f"{w.context.data_dir}/{surfaces.OUT}"
+    return lambda: surfaces.git_repo_snapshot(w.runner, root, env, exclude=exclude)
 
 
 def _surfaces_prepare(w: Wiring, args: argparse.Namespace) -> Any:  # noqa: ANN401

@@ -195,53 +195,57 @@ def tree_diff(
 
 
 def git_repo_snapshot(
-    runner: CommandRunner, repo_root: Path, env: Mapping[str, str]
+    runner: CommandRunner, repo_root: Path, env: Mapping[str, str], *, exclude: str
 ) -> dict[str, Any]:
-    """Records HEAD, ``git status --porcelain`` and a digest over tracked files.
+    """Digests the content of every tracked or untracked, non-ignored file.
 
-    The harness's own outputs under ``data/experiments/surfaces/`` are excluded from
-    the status so that the before and after snapshots are comparable.
+    Only file content counts: HEAD and ``git status`` are not compared, so a commit
+    made between prepare and capture is not a change, while an edit, addition or
+    deletion of any file outside ``exclude`` is.
 
     Args:
         runner: Command runner.
         repo_root: The repository root.
         env: Environment for git.
+        exclude: Repo-relative directory left out (the surfaces' own outputs,
+            e.g. ``"data/experiments/surfaces"``).
 
     Returns:
-        ``{"head", "status_porcelain", "tracked_files", "tracked_sha256"}``.
+        ``{"files", "content_sha256"}``.
 
     Raises:
-        ExperimentError: If a git command fails.
+        ExperimentError: If git fails.
     """
-
-    def git(*args: str) -> str:
-        done = runner.run(
-            ("git", *args), cwd=repo_root, env=env, stdin="", timeout_s=GIT_TIMEOUT_S
-        )
-        if done.returncode != 0:
-            raise ExperimentError(f"git {args[0]} failed")
-        return done.stdout
-
-    head = git("rev-parse", "HEAD").strip()
-    status = git(
-        "status", "--porcelain=v1", "--", ".", f":(exclude)data/{OUT}"
-    ).splitlines()
-    files = sorted(f for f in git("ls-files", "-z").split("\0") if f)
+    done = runner.run(
+        (
+            "git",
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+            ".",
+            f":(exclude){exclude}",
+        ),
+        cwd=repo_root,
+        env=env,
+        stdin="",
+        timeout_s=GIT_TIMEOUT_S,
+    )
+    if done.returncode != 0:
+        raise ExperimentError("git ls-files failed")
+    files = sorted({f for f in done.stdout.split("\0") if f})
     digest = hashlib.sha256()
     for rel in files:
         path = repo_root / rel
         file_sha = (
             hashlib.sha256(path.read_bytes()).hexdigest()
-            if path.is_file()
+            if path.is_file() and not path.is_symlink()
             else "MISSING"
         )
         digest.update(f"{rel}\0{file_sha}\n".encode())
-    return {
-        "head": head,
-        "status_porcelain": status,
-        "tracked_files": len(files),
-        "tracked_sha256": digest.hexdigest(),
-    }
+    return {"files": len(files), "content_sha256": digest.hexdigest()}
 
 
 # --- prepare -----------------------------------------------------------------------
@@ -623,7 +627,11 @@ def cmd_capture(
     home: str,
     surfaces: Sequence[str] = SURFACES,
 ) -> dict[str, Any]:
-    """Captures after-trees, diffs, observed actions and facts for run surfaces.
+    """Captures every surface that has run and is not yet captured.
+
+    A surface already captured is skipped (its ``facts.json`` is kept), so
+    ``run a, capture, run b, capture`` captures both. The tables are rebuilt from
+    every ``facts.json`` on disk.
 
     Args:
         ctx: Shared dependencies.
@@ -633,7 +641,7 @@ def cmd_capture(
         surfaces: Which surfaces to capture (those not run are skipped).
 
     Returns:
-        Facts per captured surface.
+        Facts per captured surface (earlier captures included).
 
     Raises:
         ExperimentError: If not prepared or nothing has run.
@@ -643,14 +651,13 @@ def cmd_capture(
     prepared = ctx.read_data_json(f"{OUT}/prepared.json")
     repo_after = repo_snapshot()
     repo_unchanged = repo_after == prepared["repo_before"]
-    captured: dict[str, Any] = {}
     for surface in surfaces:
         base = f"{OUT}/{surface}"
-        if not ctx.data_exists(f"{base}/run.json"):
+        if not ctx.data_exists(f"{base}/run.json") or ctx.data_exists(
+            f"{base}/facts.json"
+        ):
             continue
-        if ctx.data_exists(f"{base}/facts.json"):
-            raise ExperimentError(f"surface {surface} already captured")
-        captured[surface] = _capture_one(
+        _capture_one(
             ctx,
             surface,
             sandbox_path=resolve_dir(f"{base}/sandbox"),
@@ -658,6 +665,11 @@ def cmd_capture(
             repo_unchanged=repo_unchanged,
             home=home,
         )
+    captured = {
+        s: ctx.read_data_json(f"{OUT}/{s}/facts.json")
+        for s in SURFACES
+        if ctx.data_exists(f"{OUT}/{s}/facts.json")
+    }
     if not captured:
         raise ExperimentError("no surface has run yet; nothing to capture")
     ctx.writer.write_json_atomic(f"{OUT}/repo_after.json", repo_after)
@@ -675,8 +687,8 @@ def _capture_one(
     granted: Any,  # noqa: ANN401 - JSON from prepared.json, copied as-is
     repo_unchanged: bool,
     home: str,
-) -> dict[str, Any]:
-    """Captures one surface that has run and writes its four files; returns facts."""
+) -> None:
+    """Captures one surface that has run and writes its four files."""
     base = f"{OUT}/{surface}"
     before = ctx.read_data_json(f"{base}/before.tree.json")
     after = tree_snapshot(sandbox_path)
@@ -712,7 +724,6 @@ def _capture_one(
     ctx.writer.write_json_atomic(f"{base}/diff.json", diff)
     ctx.writer.write_json_atomic(f"{base}/observed.json", observed)
     ctx.writer.write_json_atomic(f"{base}/facts.json", facts)
-    return facts
 
 
 def _reply_validation(text: str | None, payloads: Mapping[str, Any]) -> dict[str, Any]:

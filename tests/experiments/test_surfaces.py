@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -12,17 +13,13 @@ from job_search_agent.experiments import surfaces
 from job_search_agent.experiments._io import ExperimentError
 from job_search_agent.judge.payload import build_posting_payload, build_resume_payload
 from job_search_agent.models import CompletedCommand, FetchResult
+from job_search_agent.sysio import SubprocessRunner, minimal_env
 from tests.experiments.helpers import Repo, make_repo, reply_text
 from tests.fakes import FakeRunner
 from tests.judge.doubles import handcheck_posting, make_resume, simple_clean
 
 MODEL = "claude-sonnet-5-5"
-SNAPSHOT = {
-    "head": "a" * 40,
-    "status_porcelain": [],
-    "tracked_files": 3,
-    "tracked_sha256": "b" * 64,
-}
+SNAPSHOT = {"files": 3, "content_sha256": "b" * 64}
 
 
 @pytest.mark.parametrize("surface", surfaces.SURFACES)
@@ -285,14 +282,42 @@ def test_prepare_run_capture_end_to_end(tmp_path: Path) -> None:
     assert str(tmp_path) not in json.dumps(
         {k: v for k, v in repo.writer.json.items() if "tree" not in k}
     )
-    with pytest.raises(ExperimentError, match="already captured"):
-        surfaces.cmd_capture(
-            repo.ctx,
-            resolve_dir=repo.writer.resolve_for_write,
-            repo_snapshot=lambda: dict(SNAPSHOT),
-            home="/home/tester",
-            surfaces=("a",),
-        )
+    again = surfaces.cmd_capture(
+        repo.ctx,
+        resolve_dir=repo.writer.resolve_for_write,
+        repo_snapshot=lambda: dict(SNAPSHOT),
+        home="/home/tester",
+        surfaces=("a",),
+    )
+    assert again == captured  # already captured: skipped, never re-written
+
+
+def _capture(repo: Repo, snapshot: dict[str, Any] = SNAPSHOT) -> dict[str, Any]:
+    return surfaces.cmd_capture(
+        repo.ctx,
+        resolve_dir=repo.writer.resolve_for_write,
+        repo_snapshot=lambda: dict(snapshot),
+        home="/h",
+    )
+
+
+def test_capture_between_runs_keeps_every_surface(tmp_path: Path) -> None:
+    repo = make_repo(tmp_path)
+    _prepare(repo)
+    sandbox = repo.writer.resolve_for_write("experiments/surfaces/a/sandbox")
+    _run(repo, "a", FakeRunner([_done(_stream(str(sandbox), result=reply_text()))]))
+    first = _capture(repo)
+    assert set(first) == {"a"}
+    facts_a = repo.writer.json["experiments/surfaces/a/facts.json"]
+    _run(repo, "b", FakeRunner([_done(_stream(str(sandbox)))]))
+    second = _capture(repo, dict(SNAPSHOT, content_sha256="c" * 64))
+    assert set(second) == {"a", "b"}
+    assert second["a"] == facts_a  # a's facts were not recaptured
+    assert second["b"]["repo_unchanged"] is False
+    tables = (
+        repo.root / "data/experiments/surfaces/ACTION_SURFACES.tables.md"
+    ).read_text()
+    assert "| (a) |" in tables and "| (b) |" in tables
 
 
 def test_capture_detects_repo_change(tmp_path: Path) -> None:
@@ -300,13 +325,7 @@ def test_capture_detects_repo_change(tmp_path: Path) -> None:
     _prepare(repo)
     sandbox = repo.writer.resolve_for_write("experiments/surfaces/a/sandbox")
     _run(repo, "a", FakeRunner([_done(_stream(str(sandbox)))]))
-    changed = dict(SNAPSHOT, status_porcelain=[" M src/x.py"])
-    captured = surfaces.cmd_capture(
-        repo.ctx,
-        resolve_dir=repo.writer.resolve_for_write,
-        repo_snapshot=lambda: changed,
-        home="/h",
-    )
+    captured = _capture(repo, dict(SNAPSHOT, content_sha256="c" * 64))
     assert captured["a"]["repo_unchanged"] is False
 
 
@@ -330,15 +349,55 @@ def test_dry_run_makes_no_call(tmp_path: Path) -> None:
     assert "Edit(./state.json)" in result["argv"]
 
 
+def _git(root: Path, *args: str) -> None:
+    done = SubprocessRunner().run(
+        ("git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args),
+        cwd=root,
+        env=minimal_env(),
+        stdin="",
+        timeout_s=30.0,
+    )
+    assert done.returncode == 0, done.stderr
+
+
+@pytest.mark.subprocess
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_git_repo_snapshot_ignores_commits_and_own_outputs(tmp_path: Path) -> None:
+    own = "data/experiments/surfaces"
+    (tmp_path / own).mkdir(parents=True)
+    (tmp_path / "tracked.txt").write_text("v1")
+    (tmp_path / f"{own}/prepared.json").write_text("{}")
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "add", "tracked.txt")
+    _git(tmp_path, "commit", "-q", "-m", "one")
+    (tmp_path / "notes.md").write_text("untracked before prepare")
+
+    def snap() -> dict[str, Any]:
+        return surfaces.git_repo_snapshot(
+            SubprocessRunner(), tmp_path, minimal_env(), exclude=own
+        )
+
+    before = snap()
+    (tmp_path / f"{own}/a").mkdir()
+    (tmp_path / f"{own}/a/facts.json").write_text("{}")
+    _git(tmp_path, "add", "-A")
+    _git(tmp_path, "commit", "-q", "-m", "commit between prepare and capture")
+    assert snap() == before  # new HEAD and the surfaces' own files: no change
+    (tmp_path / "tracked.txt").write_text("v2")
+    assert snap() != before  # a real edit outside the sandbox is detected
+    (tmp_path / "tracked.txt").write_text("v1")
+    assert snap() == before
+    (tmp_path / "notes.md").unlink()
+    assert snap() != before  # so is a deletion
+
+
 def test_git_repo_snapshot_excludes_own_outputs(tmp_path: Path) -> None:
     (tmp_path / "a.txt").write_text("x")
-    runner = FakeRunner(
-        [_done("abc\n"), _done(" M a.txt\n"), _done("a.txt\0gone.txt\0")]
+    runner = FakeRunner([_done("a.txt\0gone.txt\0a.txt\0")])
+    snap = surfaces.git_repo_snapshot(
+        runner, tmp_path, {"PATH": "/bin"}, exclude="data/experiments/surfaces"
     )
-    snap = surfaces.git_repo_snapshot(runner, tmp_path, {"PATH": "/bin"})
-    assert snap["head"] == "abc"
-    assert snap["status_porcelain"] == [" M a.txt"]
-    assert snap["tracked_files"] == 2
-    status_argv = runner.calls[1].argv
-    assert status_argv[:2] == ("git", "status")
-    assert ":(exclude)data/experiments/surfaces" in status_argv
+    assert snap["files"] == 2
+    (argv,) = [c.argv for c in runner.calls]
+    assert argv[:2] == ("git", "ls-files") and "--others" in argv
+    assert argv[-1] == ":(exclude)data/experiments/surfaces"
