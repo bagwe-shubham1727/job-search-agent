@@ -397,3 +397,59 @@ def test_exp_prompt_select_runs_against_committed_raw(
         PROCEDURE_REL,
     )
     assert '"raw_sha256"' in capsys.readouterr().out
+
+
+# --- (f) --data-dir keeps trial runs away from the graded data/ evidence ---------
+
+
+def test_replay_with_data_dir_writes_nothing_under_live_or_seeded(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    router = Router(git=_run_git())
+    monkeypatch.setattr(cli, "SubprocessRunner", lambda: router)
+    argv = [
+        "--config",
+        str(project / "config/agent.toml"),
+        "run",
+        "--replay",
+        str(project / HANDCHECK_RAW_REL),
+        "--model-backend",
+        "none",
+        "--data-dir",
+        "data/scratch",
+    ]
+    assert cli.main(argv) == 0
+    data = project / "data"
+    assert not (data / "live").exists() and not (data / "seeded").exists()
+    assert (data / "scratch" / "seeded" / "state.json").is_file()
+    (run_dir,) = (data / "scratch" / "seeded" / "runs").iterdir()
+    report = _read_json(run_dir / "report.json")
+    assert report["raw_evidence"]["path"] == HANDCHECK_RAW_REL
+
+
+def test_data_dir_outside_the_project_is_a_config_error(
+    project: Path, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    outside = tmp_path_factory.mktemp("elsewhere")
+    config = str(project / "config/agent.toml")
+    for argv in (
+        ["--config", config, "--data-dir", str(outside), "doctor"],
+        ["--config", config, "pending", "list", "--data-dir", "../escape"],
+    ):
+        assert cli.main(argv) == int(ExitCode.CONFIG_ERROR)
+    assert list(outside.iterdir()) == []
+
+
+def test_exp_wiring_honours_data_dir(project: Path) -> None:
+    config = str(project / "config/agent.toml")
+    for argv in (
+        ["--config", config, "--data-dir", "data/scratch", "exp", "sampling", "table"],
+        ["--config", config, "exp", "sampling", "table", "--data-dir", "data/scratch"],
+    ):
+        args = cli.build_parser().parse_args(argv)
+        assert args.data_dir == "data/scratch"
+    wiring = Wiring(
+        project / "config/agent.toml",
+        overrides=ConfigOverrides(data_dir="data/scratch"),
+    )
+    assert wiring.context.data_dir == "data/scratch"

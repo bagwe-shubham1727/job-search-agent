@@ -20,6 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from job_search_agent.config import ConfigOverrides
 from job_search_agent.experiments import prompt_experiment, sampling, surfaces
 from job_search_agent.experiments._io import EXPERIMENT_REFUSED_EXIT, ExperimentError
 from job_search_agent.experiments._wiring import Wiring
@@ -32,7 +33,7 @@ type Subparsers = argparse._SubParsersAction[argparse.ArgumentParser]
 
 
 def _default_wiring(args: argparse.Namespace) -> Wiring:
-    return Wiring(Path(args.config))
+    return Wiring(Path(args.config), overrides=ConfigOverrides(data_dir=args.data_dir))
 
 
 def _handler(

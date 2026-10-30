@@ -14,7 +14,7 @@ from functools import cached_property
 from pathlib import Path
 
 from job_search_agent.clock import SystemClock
-from job_search_agent.config import AgentConfig, load_config
+from job_search_agent.config import AgentConfig, ConfigOverrides, load_config
 from job_search_agent.experiments._calls import FirstReplyJudge
 from job_search_agent.experiments._io import ExperimentContext, LocalRepoReader
 from job_search_agent.experiments.prompt_experiment import HANDCHECK_RAW_REL
@@ -39,18 +39,24 @@ class Wiring:
     Args:
         config_path: ``--config`` value.
         runner: Runs ``git`` and ``claude``; defaults to ``SubprocessRunner``.
+        overrides: CLI overrides (``--data-dir``).
     """
 
     def __init__(
-        self, config_path: Path, *, runner: CommandRunner | None = None
+        self,
+        config_path: Path,
+        *,
+        runner: CommandRunner | None = None,
+        overrides: ConfigOverrides | None = None,
     ) -> None:
         self._config_path = config_path
         self._runner = runner
+        self._overrides = overrides
 
     @cached_property
     def config(self) -> AgentConfig:
         """The validated configuration."""
-        return load_config(self._config_path)
+        return load_config(self._config_path, overrides=self._overrides)
 
     @cached_property
     def runner(self) -> CommandRunner:

@@ -29,3 +29,6 @@ data/tmp/
 
 # Per-mode run locks (review fix 3); empty, never evidence
 data/*/.lock
+
+# Trial runs with `jsa --data-dir data/scratch ...`; never graded evidence
+data/scratch/

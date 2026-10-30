@@ -115,6 +115,11 @@ GITIGNORE_REQUIRED = (
 )
 """``.gitignore`` lines ``jsa doctor`` requires (CONTRACT §12, PLAN §4)."""
 
+DATA_DIR_HELP = (
+    "override [data].dir (relative to the project root; must stay inside it), "
+    "e.g. data/scratch for trial runs that must not touch data/live or data/seeded"
+)
+
 CLAUDE_VERSION_TIMEOUT_S = 15.0
 
 PROBE_FACTS = (
@@ -304,9 +309,8 @@ def build_run_deps(
 def _config(
     args: argparse.Namespace, *, model_backend: ModelBackendKind | None = None
 ) -> AgentConfig:
-    return load_config(
-        args.config, overrides=ConfigOverrides(model_backend=model_backend)
-    )
+    overrides = ConfigOverrides(data_dir=args.data_dir, model_backend=model_backend)
+    return load_config(args.config, overrides=overrides)
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -713,10 +717,27 @@ def build_parser() -> argparse.ArgumentParser:
         default=DEFAULT_CONFIG_PATH,
         help=f"configuration file (default: {DEFAULT_CONFIG_PATH})",
     )
+    parser.add_argument("--data-dir", default=None, help=DATA_DIR_HELP)
     sub = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
     for register in _REGISTRY:
         register(sub)
+    _accept_data_dir_everywhere(parser)
     return parser
+
+
+def _accept_data_dir_everywhere(parser: argparse.ArgumentParser) -> None:
+    """Lets ``--data-dir`` follow any subcommand (``jsa run --data-dir X``).
+
+    Subcommands use ``default=SUPPRESS`` so they never overwrite a value given
+    before the subcommand.
+    """
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            for child in action.choices.values():
+                child.add_argument(
+                    "--data-dir", default=argparse.SUPPRESS, help=DATA_DIR_HELP
+                )
+                _accept_data_dir_everywhere(child)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
