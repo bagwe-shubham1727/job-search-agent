@@ -1,8 +1,8 @@
 """One agent run: ``run_once(deps)`` (PLAN §1.3).
 
-Everything the run touches arrives through ``RunDeps``; this module imports no
-workstream implementation (rule, provider, résumé gate, file policy, HTTP, judge), so
-it is importable and testable on its own. The CLI does the real wiring.
+Everything the run touches arrives through ``RunDeps``: the rule, provider, résumé
+gate, HTTP source and judge are injected, and every file is written through the one
+``fsio.OutputRoot``. The CLI does the real wiring.
 
 Order of work and why:
 
@@ -26,11 +26,9 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
 from job_search_agent import __version__
 from job_search_agent.clock import format_run_id, to_eastern
@@ -44,6 +42,7 @@ from job_search_agent.errors import (
     StateCorrupt,
 )
 from job_search_agent.events import EventLog
+from job_search_agent.fsio import OutputRoot
 from job_search_agent.models import (
     FetchKind,
     JudgmentDiagnostic,
@@ -102,48 +101,6 @@ RepoReader = Callable[[str], bytes]
 """Reads a repo-relative file (through the read policy) for pending retries (A26)."""
 
 
-class OutputWriter(Protocol):
-    """The slice of WS2's ``fsio.OutputRoot`` the pipeline uses (data-root ``rel``s)."""
-
-    def resolve_for_write(self, rel: str) -> Path:
-        """Returns the checked absolute path for ``rel`` (no file is written)."""
-        ...
-
-    def write_bytes_atomic(self, rel: str, data: bytes) -> Path:
-        """Writes bytes atomically (temp file, fsync, ``os.replace``)."""
-        ...
-
-    def write_json_atomic(
-        self,
-        rel: str,
-        obj: Any,  # noqa: ANN401 - any JSON value
-        *,
-        sort_keys: bool = True,
-    ) -> Path:
-        """Writes JSON atomically (indent 2, trailing newline)."""
-        ...
-
-    def append_jsonl(self, rel: str, obj: Any) -> Path:  # noqa: ANN401 - JSON value
-        """Appends one JSON line."""
-        ...
-
-    def make_empty_dir(self, rel: str) -> Path:
-        """Creates a new, empty directory (and parents)."""
-        ...
-
-    def read_bytes(self, rel: str) -> bytes:
-        """Reads a file without following symlinks; FileNotFoundError if absent."""
-        ...
-
-    def exists(self, rel: str) -> bool:
-        """Returns True if ``rel`` exists (a symlink is refused, not followed)."""
-        ...
-
-    def lock(self, rel: str) -> AbstractContextManager[None]:
-        """Holds an exclusive non-blocking lock on ``rel``; raises ``RunLocked``."""
-        ...
-
-
 def lock_rel(*, seeded: bool) -> str:
     """Returns the data-root-relative lock file for a mode, e.g. ``"live/.lock"``.
 
@@ -187,7 +144,7 @@ class RunDeps:
     evaluate: EvaluateFn
     validate_evidence: EvidenceValidatorFn
     judge: Judge | None
-    out: OutputWriter
+    out: OutputRoot
     git: GitInspector | None
     events: EventLog
     seeded: bool
@@ -895,7 +852,6 @@ def load_report(data: bytes) -> RunReport:
 __all__ = [
     "EvaluateFn",
     "EvidenceValidatorFn",
-    "OutputWriter",
     "RepoReader",
     "ResumeLoader",
     "RunDeps",

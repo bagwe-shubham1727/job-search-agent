@@ -24,6 +24,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict
 
 from job_search_agent.clock import format_run_id, to_eastern
 from job_search_agent.config import ModelSettings
+from job_search_agent.fsio import OutputRoot
 from job_search_agent.judge.backend import (
     ADDED_ENV,
     STRIPPED_ENV,
@@ -40,7 +41,6 @@ from job_search_agent.judge.payload import (
 from job_search_agent.judge.prompt import PromptContract
 from job_search_agent.judge.rawlog import (
     AttemptValidation,
-    JsonWriter,
     RawAttemptLog,
     RawReplyLog,
 )
@@ -445,7 +445,7 @@ def build_judge(
     prompt: PromptContract,
     *,
     runner: CommandRunner,
-    writer: JsonWriter,
+    writer: OutputRoot,
     make_empty_dir: MakeEmptyDir,
     clock: Clock,
     repo_rel: Callable[[str], str],
@@ -534,7 +534,7 @@ def probe_model(
     *,
     model_requested: str | None,
     clock: Clock,
-    writer: JsonWriter | None = None,
+    writer: OutputRoot | None = None,
 ) -> ProbeResult:
     """Makes one tiny real call and records the facts (``jsa doctor --probe-model``).
 

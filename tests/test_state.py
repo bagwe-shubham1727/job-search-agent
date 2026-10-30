@@ -19,6 +19,7 @@ from job_search_agent.models import (
     RawRef,
     SeenState,
 )
+from job_search_agent.privacy import scan_text, sensitive_values
 from job_search_agent.state import (
     advance,
     drop_pending,
@@ -27,7 +28,7 @@ from job_search_agent.state import (
     sort_ids,
     state_to_bytes,
 )
-from tests.ws3_doubles import sensitive_resume_values
+from tests.tools.builders import fixture_resume
 
 T0 = datetime(2026, 10, 30, 0, 0, 0, tzinfo=UTC)
 T1 = datetime(2026, 10, 31, 0, 5, 0, tzinfo=UTC)
@@ -250,7 +251,6 @@ def test_state_contains_no_credentials_or_resume(
         )
     ).decode()
     assert "sk-ant-test" not in text
-    for value in sensitive_resume_values():
-        assert value not in text
+    assert scan_text(text, sensitive_values(fixture_resume())) == []
     assert "/Users/" not in text
     assert set(json.loads(text)) == set(SeenState.model_fields)

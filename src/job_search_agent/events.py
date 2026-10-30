@@ -14,21 +14,13 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from typing import Any, Protocol
 
+from job_search_agent.fsio import OutputRoot
 from job_search_agent.ports import Clock, JsonValue
 
 ABS_PATH_PLACEHOLDER = "[withheld: absolute path]"
 
 _ABS_PATH = re.compile(r"(?:^|[\s'\"=(])(?:/(?:Users|home|private|var|tmp|etc)/|~/)")
-
-
-class JsonlAppender(Protocol):
-    """The slice of ``fsio.OutputRoot`` that ``EventLog`` needs."""
-
-    def append_jsonl(self, rel: str, obj: Any) -> object:  # noqa: ANN401 - JSON value
-        """Appends one JSON line to a data-root-relative file."""
-        ...
 
 
 def _scrub(value: JsonValue) -> JsonValue:
@@ -61,7 +53,7 @@ class EventLog:
 
     def __init__(self, clock: Clock | None = None) -> None:
         self._clock = clock
-        self._writer: JsonlAppender | None = None
+        self._writer: OutputRoot | None = None
         self._rel: str | None = None
         self._buffer: list[dict[str, JsonValue]] = []
         self.events: list[dict[str, JsonValue]] = []
@@ -71,7 +63,7 @@ class EventLog:
         """The data-root-relative file the log writes to, once attached."""
         return self._rel
 
-    def attach(self, writer: JsonlAppender, rel: str) -> None:
+    def attach(self, writer: OutputRoot, rel: str) -> None:
         """Binds the log to its file and flushes buffered events.
 
         Args:

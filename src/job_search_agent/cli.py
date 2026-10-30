@@ -71,19 +71,14 @@ from job_search_agent.models import (
     exit_code_for_status,
 )
 from job_search_agent.pipeline import (
-    EvaluateFn,
-    EvidenceValidatorFn,
-    OutputWriter,
     RunDeps,
     load_report,
     lock_rel,
     run_once,
 )
 from job_search_agent.ports import (
-    BoardProvider,
     Clock,
     CommandRunner,
-    HttpFetcher,
     Judge,
     RawSource,
 )
@@ -162,36 +157,9 @@ def _load_resume(cfg: AgentConfig) -> VerifiedResume:
     )
 
 
-def _output_root(cfg: AgentConfig) -> OutputWriter:
-    """Builds ``fsio.OutputRoot`` on the data directory (created if absent)."""
-    return create_output_root(cfg.data_dir)
-
-
-def _reader(cfg: AgentConfig) -> Callable[[Path], bytes]:
-    """Returns a file reader guarded by ``fsio.ReadPolicy``."""
-    return ReadPolicy(cfg.project_root).read_bytes
-
-
-def _provider(cfg: AgentConfig) -> BoardProvider:
-    """Builds the configured board provider from the registry."""
-    return get_provider(cfg.board.provider)
-
-
-def _rule_functions() -> tuple[EvaluateFn, EvidenceValidatorFn]:
-    """Returns the rule's ``evaluate`` and the §7 ``validate_rule_evidence``."""
-    return evaluate, validate_rule_evidence
-
-
-def _fetcher(
-    cfg: AgentConfig, events: EventLog, transport: httpx.BaseTransport | None
-) -> HttpFetcher:
-    """Builds the allow-listed fetcher (``transport`` replaces the TLS transport)."""
-    return build_fetcher_from_settings(cfg.http, inner=transport, events=events)
-
-
 def _judge(
     cfg: AgentConfig,
-    out: OutputWriter,
+    out: OutputRoot,
     clock: Clock,
     runner: CommandRunner,
     *,
@@ -275,10 +243,9 @@ def build_run_deps(
     clock = clock or SystemClock()
     runner = runner or SubprocessRunner()
     events = EventLog(clock)
-    out = _output_root(cfg)
-    read = _reader(cfg)
-    provider = _provider(cfg)
-    evaluate_fn, validate = _rule_functions()
+    out = create_output_root(cfg.data_dir)
+    read = ReadPolicy(cfg.project_root).read_bytes
+    provider = get_provider(cfg.board.provider)
     source: RawSource
     if replay is not None:
         source = ReplaySource(
@@ -288,7 +255,8 @@ def build_run_deps(
         )
     else:
         url = provider.jobs_url(cfg.board.token)
-        source = LiveSource(_fetcher(cfg, events, transport), url)
+        fetcher = build_fetcher_from_settings(cfg.http, inner=transport, events=events)
+        source = LiveSource(fetcher, url)
     judge, reason = _judge(
         cfg, out, clock, runner, seeded=replay is not None, read=read, events=events
     )
@@ -298,8 +266,8 @@ def build_run_deps(
         source=source,
         provider=provider,
         load_resume=lambda: _load_resume(cfg),
-        evaluate=evaluate_fn,
-        validate_evidence=validate,
+        evaluate=evaluate,
+        validate_evidence=validate_rule_evidence,
         judge=judge,
         out=out,
         git=SubprocessGit(cfg.project_root, runner=runner),
@@ -472,7 +440,7 @@ def _probe_model(cfg: AgentConfig) -> int:
         printed as ``WARN`` with the recorded facts.
     """
     clock = SystemClock()
-    out = _output_root(cfg)
+    out = create_output_root(cfg.data_dir)
     backend = build_backend(
         cfg.model,
         runner=SubprocessRunner(),
@@ -535,7 +503,7 @@ def cmd_pending_drop(args: argparse.Namespace) -> int:
     cfg = _config(args)
     seeded = args.data == "seeded"
     rel = cfg.state_rel(seeded=seeded)
-    out = _output_root(cfg)
+    out = create_output_root(cfg.data_dir)
     with out.lock(lock_rel(seeded=seeded)):
         data = read_state_rel(rel, out.read_bytes)
         if data is None:
@@ -564,16 +532,15 @@ def cmd_rule(args: argparse.Namespace) -> int:
     """``jsa rule --raw RAW --id ID``: print one posting's rule record (pure)."""
     cfg = _config(args)
     resume = _load_resume(cfg)
-    read = _reader(cfg)
-    provider = _provider(cfg)
-    evaluate, validate = _rule_functions()
+    read = ReadPolicy(cfg.project_root).read_bytes
+    provider = get_provider(cfg.board.provider)
     board = provider.parse(read(cfg.project_root / _repo_rel(cfg, args.raw)))
     matches = [p for p in board.postings if p.posting_id == args.posting_id]
     if not matches:
         raise ConfigError("posting id not found in the raw file")
     posting = matches[0]
     verdict = evaluate(posting, resume)
-    errors = validate(verdict, posting.raw, resume.to_dict())
+    errors = validate_rule_evidence(verdict, posting.raw, resume.to_dict())
     record: dict[str, Any] = {
         "posting_id": posting.posting_id,
         "title": posting.title,

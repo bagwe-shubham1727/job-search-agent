@@ -1,7 +1,7 @@
 """Shared I/O seams for the experiment harnesses.
 
-Every runtime output goes through ``DataWriter`` (``fsio.OutputRoot`` in production),
-whose paths are relative to the data directory (``"experiments/prompt/SEAL.json"``).
+Every runtime output goes through ``fsio.OutputRoot``, whose paths are relative to
+the data directory (``"experiments/prompt/SEAL.json"``).
 Inputs and earlier outputs are read through ``RepoReader`` with repo-relative paths
 (``"experiments/prompt/labels/dev.labels.json"``,
 ``"data/experiments/prompt/SEAL.json"``). Ordering gates ask git through the
@@ -17,6 +17,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, ClassVar, Protocol
 
 from job_search_agent.errors import AgentError
+from job_search_agent.fsio import OutputRoot
 from job_search_agent.models import ExitCode
 from job_search_agent.ports import Clock, GitInspector
 from job_search_agent.sources import sha256_hex
@@ -32,22 +33,6 @@ class ExperimentError(AgentError):
     """
 
     exit_code: ClassVar[ExitCode] = ExitCode.CONFIG_ERROR
-
-
-class DataWriter(Protocol):
-    """The subset of ``fsio.OutputRoot`` the harnesses use."""
-
-    def write_json_atomic(self, rel: str, obj: object) -> Path:
-        """Writes JSON (sorted keys, indent 2, trailing newline) atomically."""
-        ...
-
-    def write_bytes_atomic(self, rel: str, data: bytes) -> Path:
-        """Writes bytes atomically."""
-        ...
-
-    def make_empty_dir(self, rel: str) -> Path:
-        """Creates a fresh empty directory and returns its absolute path."""
-        ...
 
 
 class RepoReader(Protocol):
@@ -104,7 +89,7 @@ class ExperimentContext:
         data_dir: Repo-relative data directory (``"data"``).
     """
 
-    writer: DataWriter
+    writer: OutputRoot
     reader: RepoReader
     git: GitInspector
     clock: Clock

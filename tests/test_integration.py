@@ -51,7 +51,7 @@ from tests.fakes import (
     Reply,
     mock_transport,
 )
-from tests.ws3_doubles import (
+from tests.pipeline_harness import (
     CONSTRUCTED_ID,
     VALID_REPLY,
     constructed_with_added_posting,

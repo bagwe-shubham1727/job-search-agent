@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from job_search_agent.events import ABS_PATH_PLACEHOLDER, EventLog
+from job_search_agent.fsio import create_output_root
 from job_search_agent.models import CompletedCommand, FetchErrorKind
 from job_search_agent.sources import (
     EvidenceStatus,
@@ -26,7 +27,6 @@ from job_search_agent.sysio import (
 )
 from tests.conftest import HANDCHECK_META_REL, HANDCHECK_RAW_REL, REPO_ROOT
 from tests.fakes import FakeRunner
-from tests.ws3_doubles import LocalOutputRoot
 
 
 def done(
@@ -144,7 +144,7 @@ def test_subprocess_runner_timeout(
 
 
 def test_event_log_buffers_until_attached_and_scrubs_paths(tmp_path: Path) -> None:
-    out = LocalOutputRoot(tmp_path / "data")
+    out = create_output_root(tmp_path / "data")
     log = EventLog()
     log.emit("http.request", {"host": "boards-api.greenhouse.io"})
     log.emit("x", {"where": "/Users/someone/file", "nested": ["~/x", "ok"]})

@@ -8,20 +8,12 @@ reach a record's structured fields.
 from __future__ import annotations
 
 from collections.abc import Callable
-from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from job_search_agent.fsio import OutputRoot
 from job_search_agent.models import BackendErrorKind
-
-
-class JsonWriter(Protocol):
-    """The subset of ``fsio.OutputRoot`` the log needs."""
-
-    def write_json_atomic(self, rel: str, obj: object) -> Path:
-        """Writes ``obj`` as JSON at the data-root-relative path ``rel``."""
-        ...
 
 
 class AttemptValidation(BaseModel):
@@ -90,7 +82,7 @@ class RawReplyLog:
 
     def __init__(
         self,
-        writer: JsonWriter,
+        writer: OutputRoot,
         *,
         repo_rel: Callable[[str], str] = default_repo_rel,
     ) -> None:

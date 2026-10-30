@@ -1,9 +1,10 @@
-"""Orchestration: ``pipeline.run_once`` end to end against test doubles (PLAN §3.4).
+"""Orchestration: ``pipeline.run_once`` end to end (PLAN §3.4).
 
-Response variants are built in memory from the committed hand-check bytes; every such
-variant is CONSTRUCTED (named so in the helper and the test) and is never written to
-``evidence/``. The rule, provider, writer and judge are WS3-local doubles
-(``tests/ws3_doubles.py``), so these tests check orchestration, not rule semantics.
+Every collaborator is the real module (``tests/pipeline_harness.py``): provider, rule,
+evidence validator, résumé gate, ``OutputRoot``, allow-listed fetcher and judge; only
+the model replies (``FakeBackend``) and git are scripted. Response variants are built
+in memory from the committed hand-check bytes; every such variant is CONSTRUCTED and
+is never written to ``evidence/``.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from job_search_agent.errors import (
 )
 from job_search_agent.fsio import OutputRoot
 from job_search_agent.judge.payload import PayloadError
+from job_search_agent.judge.validator import RejectionCode
 from job_search_agent.models import (
     BackendErrorKind,
     ExitCode,
@@ -45,22 +47,18 @@ from job_search_agent.models import (
 )
 from job_search_agent.pipeline import run_once
 from job_search_agent.report import render_runs_markdown
-from job_search_agent.sources import LiveSource
 from job_search_agent.state import parse_state
 from tests.conftest import FIXED_START, HANDCHECK_RAW_REL
 from tests.fakes import FakeBackend, FixedClock, Reply
-from tests.ws3_doubles import (
+from tests.pipeline_harness import (
     CONSTRUCTED_ID,
     JOBS_URL,
     VALID_REPLY,
-    FailingFetcher,
     Harness,
-    LocalOutputRoot,
+    InjectingRoot,
     constructed_with_added_posting,
     constructed_without,
-    failing_validate,
     handcheck_body,
-    sensitive_resume_values,
 )
 
 BODY = handcheck_body()
@@ -107,7 +105,6 @@ def test_first_run_is_baseline_with_new_count_zero_and_no_judgments(h: Harness) 
     assert report.status is RunStatus.BASELINE
     assert report.new_count == 0 and report.new_ids == []
     assert h.backend.calls == 0
-    assert h.judge.judged == []
     assert report.judgment_counts == {}
     assert records(h, report) == []
     assert records(h, report, "retried.json") == []
@@ -152,8 +149,8 @@ def test_second_run_with_added_posting_success_with_new_judges_only_new(
     report = live(h, added())
     assert report.status is RunStatus.SUCCESS_WITH_NEW
     assert report.new_ids == [NEW_ID]
-    assert h.judge.judged == [NEW_ID]
     assert h.backend.calls == 1
+    assert "Software Engineer, Constructed" in h.backend.prompts[0]
     (record,) = records(h, report)
     assert record["posting_id"] == NEW_ID
     assert record["model_judgment"]["status"] == "VALID"
@@ -182,8 +179,7 @@ def test_second_run_with_added_posting_success_with_new_judges_only_new(
 def test_fetch_failed_preserves_state_bytes(h: Harness) -> None:
     live(h)
     before = h.data(LIVE_STATE).read_bytes()
-    fetcher = FailingFetcher()
-    report = run_once(h.deps(LiveSource(fetcher, JOBS_URL)))
+    report = run_once(h.deps(h.failing_source()))
     assert report.status is RunStatus.FETCH_FAILED
     assert report.fetch_error is FetchErrorKind.TRANSPORT
     assert report.fetched_count is None and report.raw_evidence is None
@@ -373,7 +369,7 @@ def test_pending_saved_raw_tampered_stays_pending(h: Harness) -> None:
 def test_state_save_failure_reports_state_saved_false(h: Harness) -> None:
     live(h)
     before = h.data(LIVE_STATE).read_bytes()
-    failing = LocalOutputRoot(h.config.data_dir, fail_writes={LIVE_STATE})
+    failing = InjectingRoot(h.config.data_dir, fail_writes={LIVE_STATE})
     h.set_backend(FakeBackend([VALID_REPLY]))
     report = run_once(h.deps(h.live_source(Reply(body=added())), out=failing))
     assert report.state_saved is False
@@ -385,7 +381,7 @@ def test_state_save_failure_reports_state_saved_false(h: Harness) -> None:
 
 def test_baseline_state_save_failure_is_partial(tmp_path: Path) -> None:
     h = Harness.create(tmp_path)
-    failing = LocalOutputRoot(h.config.data_dir, fail_writes={LIVE_STATE})
+    failing = InjectingRoot(h.config.data_dir, fail_writes={LIVE_STATE})
     report = run_once(h.deps(h.live_source(Reply(body=BODY)), out=failing))
     assert report.status is RunStatus.PARTIAL_FAILURE
     assert "baseline_state_not_saved" in report.notes
@@ -396,29 +392,19 @@ def test_records_write_failure_skips_state_save(h: Harness) -> None:
     live(h)
     before = h.data(LIVE_STATE).read_bytes()
     h.set_backend(FakeBackend([VALID_REPLY]))
-    failing = LocalOutputRoot(h.config.data_dir, fail_writes={"records.json"})
+    failing = InjectingRoot(h.config.data_dir, fail_writes={"records.json"})
     report = run_once(h.deps(h.live_source(Reply(body=added())), out=failing))
     assert report.records_saved is False and report.state_saved is False
     assert report.status is RunStatus.PARTIAL_FAILURE
     assert h.data(LIVE_STATE).read_bytes() == before  # next run re-reports
 
 
-class OrderRecordingRoot(LocalOutputRoot):
-    def __init__(self, root: Path) -> None:
-        super().__init__(root)
-        self.order: list[str] = []
-
-    def write_bytes_atomic(self, rel: str, data: bytes) -> Path:
-        self.order.append(rel.rsplit("/", 1)[-1])
-        return super().write_bytes_atomic(rel, data)
-
-
 def test_write_order_records_state_report(h: Harness) -> None:
     live(h)
-    recorder = OrderRecordingRoot(h.config.data_dir)
+    recorder = InjectingRoot(h.config.data_dir)
     h.set_backend(FakeBackend([VALID_REPLY]))
     run_once(h.deps(h.live_source(Reply(body=added())), out=recorder))
-    order = recorder.order
+    order = [rel.rsplit("/", 1)[-1] for rel in recorder.writes]
     assert order.index("records.json") < order.index("state.json")
     assert order.index("retried.json") < order.index("state.json")
     assert order.index("state.json") < order.index("report.json")
@@ -538,8 +524,6 @@ def test_seeded_flag_mismatch_in_state_is_corrupt(h: Harness) -> None:
 
 
 def test_replay_source_with_live_flag_refused(h: Harness) -> None:
-    from job_search_agent.errors import ConfigError
-
     with pytest.raises(ConfigError):
         run_once(h.deps(h.replay_source(), seeded=False))
     assert not h.data(LIVE_STATE).exists()
@@ -585,12 +569,8 @@ def full_cycle(h: Harness) -> None:
 
 def test_outputs_contain_no_resume_content(h: Harness) -> None:
     full_cycle(h)
-    text = h.all_output_text()
-    values = sensitive_resume_values()
-    assert values  # the scan is not vacuous
-    leaked = [v for v in values if v in text]
-    assert leaked == []
-    assert "Kiran" not in text
+    assert h.privacy_findings() == []
+    assert "Kiran" not in h.all_output_text()
 
 
 def test_outputs_contain_no_absolute_paths(h: Harness) -> None:
@@ -623,7 +603,10 @@ def test_rule_evidence_failure_flags_record_and_partial(h: Harness) -> None:
     live(h)
     h.set_backend(FakeBackend([VALID_REPLY]))
     report = run_once(
-        h.deps(h.live_source(Reply(body=added())), validate=failing_validate)
+        h.deps(
+            h.live_source(Reply(body=added())),
+            validate=lambda verdict, raw, resume: ["constructed_failure"],
+        )
     )
     assert report.status is RunStatus.PARTIAL_FAILURE
     assert "rule_evidence_errors" in report.notes
@@ -641,6 +624,38 @@ def test_data_quality_errors_partial_on_later_runs_only(h: Harness) -> None:
     second = live(h, bad)
     assert second.status is RunStatus.PARTIAL_FAILURE
     assert "data_quality_errors" in second.notes
+
+
+def test_duplicate_id_is_a_data_quality_error(h: Harness) -> None:
+    obj = json.loads(BODY)
+    obj["jobs"].append(dict(obj["jobs"][0]))  # the same posting ID twice
+    obj["meta"]["total"] = len(obj["jobs"])
+    doubled = json.dumps(obj).encode()
+    first = live(h, doubled)
+    assert first.status is RunStatus.BASELINE
+    assert [i.code.value for i in first.data_quality_issues] == ["DUPLICATE_ID"]
+    assert first.unique_valid_ids == len(set(valid_ids(BODY)))
+    second = live(h, doubled)
+    assert second.status is RunStatus.PARTIAL_FAILURE
+    assert "data_quality_errors" in second.notes
+    assert second.new_count == 0  # the duplicate is not a new posting
+
+
+def test_reply_echoing_a_resume_value_is_rejected_r10(h: Harness) -> None:
+    live(h)
+    bullet = h.resume().to_dict()["experience"][0]["bullets"][0]
+    echo = json.dumps({**json.loads(VALID_REPLY), "summary": f"Fits: {bullet}"})
+    h.set_backend(FakeBackend([echo, echo]))
+    report = live(h, added())
+    assert report.status is RunStatus.PARTIAL_FAILURE
+    (record,) = records(h, report)
+    judgment = record["model_judgment"]
+    assert judgment["status"] == "INVALID_OUTPUT"
+    assert judgment["summary"] is None and judgment["evidence"] == []
+    codes = [a["validation_codes"] for a in judgment["diagnostic"]["attempts"]]
+    assert codes == [[RejectionCode.RESUME_VALUE_ECHO.value]] * 2
+    assert bullet not in (h.run_dir(report.run_id) / "records.json").read_text()
+    assert state(h).pending[0].last_status is JudgmentStatus.INVALID_OUTPUT
 
 
 def test_event_trace_one_event_per_observation(h: Harness) -> None:
@@ -701,18 +716,6 @@ class _RaisingJudge:
         raise self.exc
 
 
-class _OrderedOut(LocalOutputRoot):
-    """Records every atomic write, in order."""
-
-    def __init__(self, root: Path) -> None:
-        super().__init__(root)
-        self.writes: list[str] = []
-
-    def write_bytes_atomic(self, rel: str, data: bytes) -> Path:
-        self.writes.append(rel)
-        return super().write_bytes_atomic(rel, data)
-
-
 @pytest.mark.parametrize(
     ("exc", "code"),
     [
@@ -725,7 +728,7 @@ def test_raising_judge_gives_error_judgment_and_partial_failure(
     h: Harness, exc: Exception, code: str
 ) -> None:
     live(h)
-    out = _OrderedOut(h.config.data_dir)
+    out = InjectingRoot(h.config.data_dir)
     deps = dataclasses.replace(
         h.deps(h.live_source(Reply(status=200, body=added())), out=out),
         judge=_RaisingJudge(exc),
@@ -766,7 +769,7 @@ def test_run_fails_fast_while_another_process_holds_the_lock(h: Harness) -> None
     assert h.data(LIVE_STATE).read_bytes() == before
     assert sorted(p.name for p in h.data("live/runs").iterdir()) == runs_before
     assert h.transports[-1].requests == []
-    assert h.judge.judged == []
+    assert h.backend.calls == 0
     report = run_once(h.deps(h.live_source(Reply(body=BODY)), out=out))
     assert report.status is RunStatus.SUCCESS_NO_NEW  # the lock was released
 
@@ -793,25 +796,10 @@ def test_same_second_run_id_is_a_clear_error_not_path_rejected(h: Harness) -> No
 # --- review fix 4: the state is read through the write root's path policy ----------
 
 
-class _StateOverride(LocalOutputRoot):
-    """Serves ``state_rel`` from memory, proving reads go through ``out``."""
-
-    def __init__(self, root: Path, state_rel: str, data: bytes) -> None:
-        super().__init__(root)
-        self.state_rel = state_rel
-        self.data = data
-        self.reads: list[str] = []
-
-    def read_bytes(self, rel: str) -> bytes:
-        self.reads.append(rel)
-        if rel == self.state_rel:
-            return self.data
-        return super().read_bytes(rel)
-
-
 def test_state_is_read_through_the_output_writer(h: Harness) -> None:
-    live(h)  # a valid state file on disk
-    out = _StateOverride(h.config.data_dir, LIVE_STATE, b"not json")
+    live(h)
+    h.data(LIVE_STATE).write_bytes(b"not json")
+    out = InjectingRoot(h.config.data_dir)
     with pytest.raises(StateCorrupt):
         run_once(h.deps(h.live_source(Reply(body=BODY)), out=out))
     assert out.reads == [LIVE_STATE]
