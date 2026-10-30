@@ -35,6 +35,7 @@ from job_search_agent import __version__
 from job_search_agent.clock import format_run_id, to_eastern
 from job_search_agent.config import AgentConfig
 from job_search_agent.errors import (
+    AgentError,
     ConfigError,
     InvalidResponse,
     PathRejected,
@@ -199,6 +200,16 @@ def _unavailable(reason: str) -> ModelJudgment:
     return ModelJudgment(
         status=JudgmentStatus.UNAVAILABLE,
         diagnostic=JudgmentDiagnostic(unavailable_reason=reason),
+    )
+
+
+def _crashed(exc: BaseException) -> ModelJudgment:
+    """An ``ERROR`` judgment for a judge that raised; the reason names the type only."""
+    return ModelJudgment(
+        status=JudgmentStatus.ERROR,
+        diagnostic=JudgmentDiagnostic(
+            error_reason=f"judge_raised:{type(exc).__name__}"
+        ),
     )
 
 
@@ -382,10 +393,7 @@ class _Pipeline:
                 posting.posting_id, _unavailable(self.d.unavailable_reason)
             )
         else:
-            log_dir = f"{run.run_rel}/model/{posting.posting_id}"
-            outcome = self.d.judge.judge(posting, resume, log_dir=log_dir)
-            if outcome.posting_id != posting.posting_id:
-                raise ValueError("judge returned an outcome for another posting")
+            outcome = self._call_judge(self.d.judge, run, posting, resume)
         self.d.events.emit(
             "judgment.completed",
             {
@@ -394,6 +402,33 @@ class _Pipeline:
                 "label": outcome.judgment.label,
             },
         )
+        return outcome
+
+    def _call_judge(
+        self, judge: Judge, run: _Run, posting: Posting, resume: VerifiedResume
+    ) -> JudgmentOutcome:
+        """Calls the judge; an exception it raises becomes an ``ERROR`` judgment.
+
+        ``ports.Judge`` implementations must not raise, but a failed raw-log write
+        (``OSError``/``PathRejected``) or a payload bug (``PayloadError``, a
+        ``ValueError``) must not abort the run either: the posting then goes
+        pending through the normal path, and records, state and report are written.
+        """
+        log_dir = f"{run.run_rel}/model/{posting.posting_id}"
+        try:
+            outcome = judge.judge(posting, resume, log_dir=log_dir)
+        except (AgentError, OSError, ValueError) as exc:
+            judgment = _crashed(exc)
+            self.d.events.emit(
+                "judgment.crashed",
+                {
+                    "posting_id": posting.posting_id,
+                    "reason": judgment.diagnostic.error_reason,
+                },
+            )
+            return JudgmentOutcome(posting.posting_id, judgment)
+        if outcome.posting_id != posting.posting_id:
+            raise ValueError("judge returned an outcome for another posting")
         return outcome
 
     def _record(

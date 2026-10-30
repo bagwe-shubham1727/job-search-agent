@@ -514,6 +514,10 @@ class JudgmentDiagnostic(FrozenModel):
     attempts: list[AttemptSummary] = Field(default_factory=list, max_length=2)
     unavailable_reason: str | None = None
     """Short code such as ``"backend_none"`` or ``"cli_not_found"``; never stderr."""
+    error_reason: str | None = Field(default=None, exclude_if=lambda v: v is None)
+    """Short value-free code for an ``ERROR`` the judge itself raised, e.g.
+    ``"judge_raised:PathRejected"`` (review fix 1). Omitted from JSON when unset, so
+    ordinary records keep their exact shape."""
 
     @property
     def raw_log_refs(self) -> list[str]:

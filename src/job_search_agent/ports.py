@@ -195,7 +195,14 @@ class GitInspector(Protocol):
 
 
 class Judge(Protocol):
-    """Produces Claude's judgment for one posting (WS4 ``judge.judge_posting``)."""
+    """Produces Claude's judgment for one posting (WS4 ``judge.judge_posting``).
+
+    Implementations must not raise: every failure (no backend, a failed call, an
+    invalid reply, a log or work-directory write that fails) is reported through the
+    returned ``JudgmentOutcome``'s status. The pipeline still guards the call, and
+    turns an ``AgentError``, ``OSError`` or ``ValueError`` that escapes into an
+    ``ERROR`` judgment so the posting stays pending (review fix 1).
+    """
 
     def judge(
         self, posting: Posting, resume: VerifiedResume, *, log_dir: str
@@ -211,5 +218,8 @@ class Judge(Protocol):
         Returns:
             The outcome; ``UNAVAILABLE`` without any call when the backend is
             unavailable.
+
+        Raises:
+            Nothing by contract; see the class docstring.
         """
         ...

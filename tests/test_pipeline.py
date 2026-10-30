@@ -8,6 +8,7 @@ variant is CONSTRUCTED (named so in the helper and the test) and is never writte
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from pathlib import Path
@@ -15,12 +16,15 @@ from typing import Any
 
 import pytest
 
-from job_search_agent.errors import ResumeRefused, StateCorrupt
+from job_search_agent.errors import PathRejected, ResumeRefused, StateCorrupt
+from job_search_agent.judge.payload import PayloadError
 from job_search_agent.models import (
     BackendErrorKind,
     FetchErrorKind,
+    JudgmentOutcome,
     JudgmentStatus,
     OutputRecord,
+    Posting,
     RefusalCode,
     RunReport,
     RunStatus,
@@ -668,3 +672,69 @@ def test_constructed_variant_removing_posting_is_no_new(h: Harness) -> None:
     assert str(first_id) in state(h).seen_ids  # cumulative
     report = live(h, BODY)  # it reappears: still not new
     assert report.new_count == 0
+
+
+# --- review fix 1: a raising judge never aborts the run ---------------------------
+
+
+class _RaisingJudge:
+    """A ``ports.Judge`` that breaks its no-raise contract (failure injection)."""
+
+    def __init__(self, exc: Exception) -> None:
+        self.exc = exc
+
+    def judge(
+        self, posting: Posting, resume: VerifiedResume, *, log_dir: str
+    ) -> JudgmentOutcome:
+        raise self.exc
+
+
+class _OrderedOut(LocalOutputRoot):
+    """Records every atomic write, in order."""
+
+    def __init__(self, root: Path) -> None:
+        super().__init__(root)
+        self.writes: list[str] = []
+
+    def write_bytes_atomic(self, rel: str, data: bytes) -> Path:
+        self.writes.append(rel)
+        return super().write_bytes_atomic(rel, data)
+
+
+@pytest.mark.parametrize(
+    ("exc", "code"),
+    [
+        (PathRejected("not_empty", "tmp/claude-x"), "judge_raised:PathRejected"),
+        (OSError("disk full"), "judge_raised:OSError"),
+        (PayloadError("skills.backend must be a list"), "judge_raised:PayloadError"),
+    ],
+)
+def test_raising_judge_gives_error_judgment_and_partial_failure(
+    h: Harness, exc: Exception, code: str
+) -> None:
+    live(h)
+    out = _OrderedOut(h.config.data_dir)
+    deps = dataclasses.replace(
+        h.deps(h.live_source(Reply(status=200, body=added())), out=out),
+        judge=_RaisingJudge(exc),
+    )
+    report = run_once(deps)
+    assert report.status is RunStatus.PARTIAL_FAILURE
+    assert report.unresolved_pending_ids == [NEW_ID]
+    assert [p.posting_id for p in state(h).pending] == [NEW_ID]
+    (record,) = records(h, report)
+    judgment = record["model_judgment"]
+    assert judgment["status"] == "ERROR"
+    assert judgment["diagnostic"]["error_reason"] == code
+    assert str(exc) not in json.dumps(record)
+    run_rel = f"live/runs/{report.run_id}"
+    order = [
+        out.writes.index(f"{run_rel}/records.json"),
+        out.writes.index(LIVE_STATE),
+        out.writes.index(f"{run_rel}/report.json"),
+    ]
+    assert order == sorted(order)
+    crashed = [e for e in h.events[-1].events if e["event"] == "judgment.crashed"]
+    assert len(crashed) == 1
+    assert crashed[0]["posting_id"] == NEW_ID
+    assert crashed[0]["reason"] == code
