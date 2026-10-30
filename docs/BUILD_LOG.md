@@ -125,3 +125,37 @@ merge `1c334e9`. The existing test `test_no_count_constant` caught the string `7
 is committed (sha recorded) and is not to be opened until `score`.
 
 **22:25 Google-style review** launched (fresh read-only reviewer agent).
+
+## 2026-10-30
+
+**00:00–02:00 Usage limit.** The Google-style review agent stopped at the 5-hour usage limit and resumed after the reset
+at 02:00 ET.
+
+**02:05 Google-style review verdict: "Not yet → LGTM with comments".**
+- Must-fix: an exception inside the judge (e.g. `PathRejected` from the work-dir maker) would abort the whole run with
+  no report, contradicting §9/§10 (it should be ERROR plus PARTIAL_FAILURE).
+- Should-fix:
+  - The `claude` child env was a denylist, which fails open.
+  - Nothing stopped two runs at once.
+  - Path policy had four owners, and state reads bypassed `O_NOFOLLOW`.
+  - Claude free text could echo résumé values into records (§12).
+  - `VerifiedResume` was constructible by anyone.
+  - Pre-spawn backend failures were mislabeled ERROR instead of UNAVAILABLE.
+  - Several functions were over 40 lines.
+- Plus 8 nits.
+
+**02:10–06:30 Review fixes** (`b647a82..d53dabe`, 9 commits; a fresh fix agent, test-first, each regression test
+failing before its fix).
+- PLAN amendments R9 (allowlist env) and R10 (`RESUME_VALUE_ECHO` validator code).
+- New exit code 7 (`LOCKED`) for concurrent runs or a same-second run-ID collision.
+- Gate: 988 passed, 2 skipped; meta 3 passed.
+
+**06:33 Probe after R9.** With the allowlist-only env, the real probe still authenticated on the subscription
+(`is_error: false`, reply OK): `data/doctor/2026-10-30T06-33-30Z.json`. Pushed `91256f7`.
+
+**06:35 Ponytail audit launched.** The student installed the ponytail plugin and asked for its audit after the fixes. A
+fresh read-only agent follows `skills/ponytail-audit/SKILL.md`. Its focus: what to delete, merge or split, test bloat,
+and TA usability.
+
+**06:35 Sampling deliberately not run yet.** Chapter 1 asks for the student's prediction to be written before the run.
+Claude is waiting for that one line rather than running first.
