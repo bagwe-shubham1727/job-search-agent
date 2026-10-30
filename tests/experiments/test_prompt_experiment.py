@@ -10,6 +10,7 @@ import pytest
 from job_search_agent.experiments import prompt_experiment as pe
 from job_search_agent.experiments._io import ExperimentError
 from job_search_agent.experiments.selection import SETS
+from tests.conftest import RawHandcheck
 from tests.experiments.helpers import (
     DEFAULT_COUNTS,
     Board,
@@ -106,12 +107,14 @@ def test_select_requires_committed_procedure(tmp_path: Path) -> None:
         )
 
 
-def test_select_writes_outputs_without_strata_and_refuses_twice(tmp_path: Path) -> None:
+def test_select_writes_outputs_without_strata_and_refuses_twice(
+    tmp_path: Path, raw_handcheck: RawHandcheck
+) -> None:
     repo = make_repo(tmp_path)
     board = make_board(DEFAULT_COUNTS)
     doc = _select(repo, board)
     assert doc["seed"] == 20261029
-    assert doc["raw_sha256"] == pe.HANDCHECK_RAW_SHA256
+    assert doc["raw_sha256"] == raw_handcheck.meta["sha256"]
     selection_text = (repo.root / "data/experiments/prompt/selection.json").read_text()
     for forbidden in ('"M"', "N1", "N2", "N3", "MATCH", 'stratum"'):
         assert forbidden not in selection_text
@@ -129,6 +132,16 @@ def test_select_writes_outputs_without_strata_and_refuses_twice(tmp_path: Path) 
         ).is_file()
     with pytest.raises(ExperimentError, match="already exists"):
         _select(repo, board)
+
+
+def test_select_refuses_raw_that_differs_from_its_meta(
+    tmp_path: Path, raw_handcheck: RawHandcheck
+) -> None:
+    repo = make_repo(tmp_path)
+    repo.write(pe.HANDCHECK_META_REL, {**raw_handcheck.meta, "sha256": "0" * 64})
+    with pytest.raises(ExperimentError, match="pinned"):
+        _select(repo, make_board(DEFAULT_COUNTS))
+    assert not repo.ctx.data_exists(pe.SELECTION)
 
 
 # --- seal ------------------------------------------------------------------------

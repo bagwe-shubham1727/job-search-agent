@@ -57,16 +57,15 @@ from job_search_agent.experiments.selection import (
 )
 from job_search_agent.judge.prompt import PromptContract, changed_sections
 from job_search_agent.models import Posting, VerdictLabel
+from job_search_agent.sources import meta_path_for
 
 OUT = "experiments/prompt"
 """Data-relative output directory."""
 
 PROCEDURE_REL = "experiments/prompt/PROCEDURE.md"
 HANDCHECK_RAW_REL = "evidence/handcheck/stripe-jobs-2026-10-29T22-41-31Z.json"
-HANDCHECK_RAW_SHA256 = (
-    "74e20e05ef2261864f89b8d95ab8673454c38cbbf16860d8e9f524f7f31082fd"
-)
-"""Pinned from ``evidence/handcheck/...meta.json`` (CONTRACT §13 prefix 74e20e05…)."""
+HANDCHECK_META_REL = meta_path_for(Path(HANDCHECK_RAW_REL)).as_posix()
+"""The committed meta file whose ``sha256`` pins the hand-check raw bytes."""
 
 PROMPTS: tuple[str, ...] = ("v1", "v2")
 SAMPLING_MANIFEST = "experiments/sampling/manifest.json"
@@ -107,6 +106,19 @@ def _now(ctx: ExperimentContext) -> str:
 # --- select ----------------------------------------------------------------------
 
 
+def pinned_handcheck_sha256(ctx: ExperimentContext) -> str:
+    """Returns the hand-check raw file's sha256 as pinned in its committed meta.
+
+    Raises:
+        ExperimentError: If the meta file is missing, not JSON or has no digest.
+    """
+    meta = read_json(ctx.reader, HANDCHECK_META_REL)
+    pinned = meta.get("sha256") if isinstance(meta, dict) else None
+    if not isinstance(pinned, str):
+        raise ExperimentError(f"no sha256 in {HANDCHECK_META_REL}")
+    return pinned
+
+
 def cmd_select(
     ctx: ExperimentContext,
     *,
@@ -127,14 +139,15 @@ def cmd_select(
 
     Raises:
         ExperimentError: If a selection exists, PROCEDURE.md is not committed, the
-            raw file's digest is not the pinned one, or a stratum is short.
+            raw file's digest is not the one pinned in its meta, or a stratum is
+            short.
     """
     if ctx.data_exists(SELECTION):
         raise ExperimentError("selection already exists; select runs once only")
     if not ctx.git.is_tracked_and_clean(Path(PROCEDURE_REL)):
         raise ExperimentError(f"commit {PROCEDURE_REL} before running select")
     raw_sha = file_sha256(ctx.reader, HANDCHECK_RAW_REL)
-    if raw_sha != HANDCHECK_RAW_SHA256:
+    if raw_sha != pinned_handcheck_sha256(ctx):
         raise ExperimentError("hand-check raw file digest differs from the pinned one")
     selection = select_postings(postings, evaluate)
     by_id = {p.posting_id: p for p in postings}
