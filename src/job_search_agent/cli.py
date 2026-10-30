@@ -1,22 +1,91 @@
-"""``jsa`` command-line entry point (skeleton from WS0; WS3 owns it afterwards).
+"""``jsa`` command-line entry point (PLAN §1.5); WS3 wiring.
 
-Each subcommand is registered with its documented arguments (PLAN §1.5) and a
-handler. Until a workstream implements a handler, the stub prints which workstream
-owns it and exits with ``NOT_IMPLEMENTED_EXIT``. The ``exp`` command group is added
-by ``job_search_agent.experiments.cli.register`` when that module exists (WS4); its
-absence does not break the CLI.
+Every command loads its collaborators lazily, inside the command, through
+``_component``. That keeps this module importable while other workstreams' modules are
+absent, and turns a missing component into an explicit ``ConfigError`` (exit 5)
+instead of an import crash. The seams it expects are, by module:
+
+* ``job_search_agent.resume``: ``load_verified_resume(path, pinned_sha256)``
+* ``job_search_agent.fsio``: ``OutputRoot(root)``, ``ReadPolicy(project_root)``
+  with ``.check(path) -> Path``
+* ``job_search_agent.http``: ``build_fetcher(allowed_hosts, *, timeout_s, max_bytes,
+  max_redirects, user_agent, events)``
+* ``job_search_agent.providers.greenhouse``: ``GreenhouseProvider()``
+* ``job_search_agent.rule.verdict``: ``evaluate(posting, resume)``
+* ``job_search_agent.evidence_validator``: ``validate_rule_evidence(verdict, raw,
+  resume_data)``
+* ``job_search_agent.judge.judge``: ``build_judge(config, out, *, clock, runner)``
+* ``job_search_agent.judge.backend``: ``probe_model(config, out, *, clock, runner)``
+* ``job_search_agent.privacy``: ``sensitive_values(resume)``, ``scan_tree(root,
+  values)``
+
+Exit codes follow PLAN §1.4: 0 BASELINE/SUCCESS_*, 1 PARTIAL_FAILURE, 2 fetch or
+response failure, 3 résumé refused, 4 state corrupt, 5 configuration error. Nothing
+printed here contains résumé values, credentials or absolute paths.
 """
 
 from __future__ import annotations
 
 import argparse
 import importlib
+import json
+import os
+import shutil
 import sys
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
+from typing import Any, cast
 
-from job_search_agent.config import DEFAULT_CONFIG_PATH
-from job_search_agent.errors import AgentError
+from job_search_agent.clock import SystemClock, format_run_id
+from job_search_agent.config import (
+    DEFAULT_CONFIG_PATH,
+    AgentConfig,
+    ConfigOverrides,
+    ModelBackendKind,
+    load_config,
+)
+from job_search_agent.errors import AgentError, ConfigError, ResumeRefused, StateCorrupt
+from job_search_agent.events import EventLog
+from job_search_agent.models import (
+    ExitCode,
+    RunReport,
+    VerifiedResume,
+    exit_code_for_status,
+)
+from job_search_agent.pipeline import (
+    EvaluateFn,
+    EvidenceValidatorFn,
+    OutputWriter,
+    RunDeps,
+    load_report,
+    run_once,
+)
+from job_search_agent.ports import (
+    BoardProvider,
+    Clock,
+    CommandRunner,
+    HttpFetcher,
+    JsonValue,
+    Judge,
+    RawSource,
+)
+from job_search_agent.report import render_runs_markdown
+from job_search_agent.sources import (
+    EvidenceStatus,
+    LiveSource,
+    ReplaySource,
+    verify_saved_evidence,
+)
+from job_search_agent.state import (
+    drop_pending,
+    load_state,
+    parse_state,
+    read_state_bytes,
+    state_to_bytes,
+)
+from job_search_agent.sysio import SubprocessGit, SubprocessRunner, minimal_env
 
 Handler = Callable[[argparse.Namespace], int]
 """A subcommand handler: receives parsed arguments, returns the exit code."""
@@ -24,34 +93,500 @@ Handler = Callable[[argparse.Namespace], int]
 type Subparsers = argparse._SubParsersAction[argparse.ArgumentParser]
 """The object returned by ``add_subparsers``; registrars add commands to it."""
 
-NOT_IMPLEMENTED_EXIT = 70
-"""Exit status of a stub (BSD ``EX_SOFTWARE``); distinct from every run exit code."""
-
 _EXPERIMENTS_MODULE = "job_search_agent.experiments.cli"
 _EXPERIMENTS_ABSENT = frozenset({"job_search_agent.experiments", _EXPERIMENTS_MODULE})
 
+GITIGNORE_REQUIRED = (
+    "private/",
+    "*.resume.json",
+    "!*.resume.example.json",
+    "data/tmp/",
+)
+"""``.gitignore`` lines ``jsa doctor`` requires (CONTRACT §12, PLAN §4)."""
 
-def _not_implemented(command: str, owner: str) -> Handler:
-    """Builds a stub handler for a subcommand that is not implemented yet.
+CLAUDE_VERSION_TIMEOUT_S = 15.0
+
+
+# --- lazy components ------------------------------------------------------------
+
+
+def _component(module: str) -> ModuleType:
+    """Imports another workstream's module, or explains that it is missing.
 
     Args:
-        command: The subcommand name, for the message.
-        owner: The workstream that will implement it, e.g. ``"WS3"``.
+        module: Dotted module name.
 
     Returns:
-        A handler that prints the message to stderr and returns
-        ``NOT_IMPLEMENTED_EXIT``.
+        The module.
+
+    Raises:
+        ConfigError: The module (or its package) is not installed.
+        ModuleNotFoundError: The module exists but one of *its* imports is missing.
     """
+    try:
+        return importlib.import_module(module)
+    except ModuleNotFoundError as exc:
+        name = exc.name or ""
+        if name and (module == name or module.startswith(name + ".")):
+            raise ConfigError(f"component not installed: {module}") from exc
+        raise
 
-    def handler(_args: argparse.Namespace) -> int:
-        print(f"jsa {command}: not implemented yet ({owner})", file=sys.stderr)
-        return NOT_IMPLEMENTED_EXIT
 
-    return handler
+def _load_resume(cfg: AgentConfig) -> VerifiedResume:
+    """Runs the WS2 résumé gate on the configured fixture.
+
+    Raises:
+        ResumeRefused: Any §12 check failed.
+        ConfigError: The résumé module is not installed.
+    """
+    resume = _component("job_search_agent.resume")
+    loaded = resume.load_verified_resume(cfg.resume_path, cfg.resume.pinned_sha256)
+    if not isinstance(loaded, VerifiedResume):
+        raise ConfigError("resume gate returned an unexpected type")
+    return loaded
+
+
+def _output_root(cfg: AgentConfig) -> OutputWriter:
+    """Builds WS2's ``fsio.OutputRoot`` on the data directory (created if absent)."""
+    fsio = _component("job_search_agent.fsio")
+    cfg.data_dir.mkdir(parents=True, exist_ok=True)
+    return cast(OutputWriter, fsio.OutputRoot(cfg.data_dir))
+
+
+def _reader(cfg: AgentConfig) -> Callable[[Path], bytes]:
+    """Returns a file reader guarded by WS2's ``fsio.ReadPolicy``."""
+    fsio = _component("job_search_agent.fsio")
+    policy = fsio.ReadPolicy(cfg.project_root)
+
+    def read(path: Path) -> bytes:
+        checked: Path = policy.check(path)
+        return checked.read_bytes()
+
+    return read
+
+
+def _provider(cfg: AgentConfig) -> BoardProvider:
+    """Builds the configured board provider (only ``greenhouse`` exists)."""
+    if cfg.board.provider != "greenhouse":
+        raise ConfigError(f"unknown provider: {cfg.board.provider}")
+    module = _component("job_search_agent.providers.greenhouse")
+    return cast(BoardProvider, module.GreenhouseProvider())
+
+
+def _rule_functions() -> tuple[EvaluateFn, EvidenceValidatorFn]:
+    """Returns WS1's ``evaluate`` and ``validate_rule_evidence``."""
+    verdict = _component("job_search_agent.rule.verdict")
+    validator = _component("job_search_agent.evidence_validator")
+    return (
+        cast(EvaluateFn, verdict.evaluate),
+        cast(EvidenceValidatorFn, validator.validate_rule_evidence),
+    )
+
+
+def _fetcher(cfg: AgentConfig, events: EventLog) -> HttpFetcher:
+    """Builds WS2's allow-listed fetcher."""
+    http = _component("job_search_agent.http")
+    return cast(
+        HttpFetcher,
+        http.build_fetcher(
+            cfg.http.allowed_hosts,
+            timeout_s=cfg.http.timeout_s,
+            max_bytes=cfg.http.max_bytes,
+            max_redirects=cfg.http.max_redirects,
+            user_agent=cfg.http.user_agent,
+            events=events,
+        ),
+    )
+
+
+def _judge(
+    cfg: AgentConfig, out: OutputWriter, clock: Clock, runner: CommandRunner
+) -> tuple[Judge | None, str]:
+    """Builds WS4's judge, or explains why judgments will be ``UNAVAILABLE``.
+
+    Returns:
+        ``(judge, unavailable_reason)``; ``judge`` is ``None`` for backend ``none``
+        or when the judge module is not installed (never a silent fallback: the
+        records say UNAVAILABLE with this reason and the run is PARTIAL_FAILURE).
+    """
+    if cfg.model.backend == "none":
+        return None, "backend_none"
+    try:
+        module = _component("job_search_agent.judge.judge")
+    except ConfigError:
+        print("jsa run: judge not installed; judgments UNAVAILABLE", file=sys.stderr)
+        return None, "judge_module_missing"
+    judge = module.build_judge(cfg, out, clock=clock, runner=runner)
+    return cast(Judge, judge), "backend_none"
+
+
+def _repo_rel(cfg: AgentConfig, path: Path) -> str:
+    """Returns ``path`` relative to the project root, or raises ``ConfigError``."""
+    resolved = path.resolve()
+    root = cfg.project_root.resolve()
+    if not resolved.is_relative_to(root):
+        raise ConfigError("path must be inside the project root")
+    return resolved.relative_to(root).as_posix()
+
+
+# --- run ------------------------------------------------------------------------
+
+
+def build_run_deps(cfg: AgentConfig, replay: Path | None) -> RunDeps:
+    """Wires the real collaborators for ``jsa run``.
+
+    Args:
+        cfg: The configuration (with any CLI overrides applied).
+        replay: A saved raw response to replay (seeded run), or ``None`` for live.
+
+    Returns:
+        The run dependencies.
+
+    Raises:
+        ConfigError: A component is missing or the replay path is outside the
+            project.
+    """
+    clock = SystemClock()
+    runner = SubprocessRunner()
+    events = EventLog(clock)
+    out = _output_root(cfg)
+    read = _reader(cfg)
+    provider = _provider(cfg)
+    evaluate, validate = _rule_functions()
+    source: RawSource
+    if replay is not None:
+        source = ReplaySource(
+            cfg.project_root / _repo_rel(cfg, replay),
+            _repo_rel(cfg, replay),
+            read_bytes=read,
+        )
+    else:
+        url = provider.jobs_url(cfg.board.token)
+        source = LiveSource(_fetcher(cfg, events), url)
+    judge, reason = _judge(cfg, out, clock, runner)
+    return RunDeps(
+        config=cfg,
+        clock=clock,
+        source=source,
+        provider=provider,
+        load_resume=lambda: _load_resume(cfg),
+        evaluate=evaluate,
+        validate_evidence=validate,
+        judge=judge,
+        out=out,
+        git=SubprocessGit(cfg.project_root, runner=runner),
+        events=events,
+        seeded=replay is not None,
+        read_repo_file=lambda rel: read(cfg.project_root / rel),
+        unavailable_reason=reason,
+        terminal=lambda text: print(text, end=""),
+    )
+
+
+def _config(
+    args: argparse.Namespace, *, model_backend: ModelBackendKind | None = None
+) -> AgentConfig:
+    return load_config(
+        args.config, overrides=ConfigOverrides(model_backend=model_backend)
+    )
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    """``jsa run [--replay RAW] [--model-backend claude-cli|none]``."""
+    cfg = _config(args, model_backend=args.model_backend)
+    report: RunReport = run_once(build_run_deps(cfg, args.replay))
+    return int(exit_code_for_status(report.status))
+
+
+# --- doctor ---------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Check:
+    """One ``jsa doctor`` line."""
+
+    name: str
+    level: str
+    """``OK``, ``WARN``, ``SKIP`` or ``FAIL``."""
+    detail: str
+    refused: bool = False
+    """True only when the résumé gate refused the fixture (exit 3)."""
+
+
+def _check_claude(cfg: AgentConfig, runner: CommandRunner) -> Check:
+    if cfg.model.backend == "none":
+        return Check("claude", "SKIP", "model backend is 'none'")
+    found = shutil.which(cfg.model.executable)
+    if found is None:
+        return Check(
+            "claude", "WARN", "executable not on PATH; judgments will be UNAVAILABLE"
+        )
+    try:
+        done = runner.run(
+            [found, "--version"],
+            cwd=cfg.project_root,
+            env=minimal_env(),
+            stdin="",
+            timeout_s=CLAUDE_VERSION_TIMEOUT_S,
+        )
+    except OSError:
+        return Check("claude", "WARN", "found on PATH but could not be started")
+    version = (done.stdout.strip().splitlines() or ["?"])[0][:80]
+    if done.returncode != 0:
+        return Check("claude", "WARN", "found on PATH; --version failed")
+    return Check("claude", "OK", f"found on PATH, version {version}")
+
+
+def _check_resume(cfg: AgentConfig) -> Check:
+    try:
+        _load_resume(cfg)
+    except ResumeRefused as exc:
+        codes = ", ".join(sorted(exc.codes))
+        return Check("resume", "FAIL", f"refused: {codes}", refused=True)
+    except ConfigError as exc:
+        return Check("resume", "FAIL", str(exc))
+    return Check(
+        "resume",
+        "OK",
+        f"{cfg.resume.path} passed every check (pinned digest, fictional persona)",
+    )
+
+
+def _check_gitignore(cfg: AgentConfig) -> Check:
+    path = cfg.project_root / ".gitignore"
+    try:
+        lines = {line.strip() for line in path.read_text(encoding="utf-8").splitlines()}
+    except OSError:
+        return Check("gitignore", "FAIL", ".gitignore not readable")
+    missing = [rule for rule in GITIGNORE_REQUIRED if rule not in lines]
+    if missing:
+        return Check("gitignore", "FAIL", "missing rules: " + ", ".join(missing))
+    return Check("gitignore", "OK", "required rules present")
+
+
+def _check_state(cfg: AgentConfig, *, seeded: bool) -> Check:
+    rel = cfg.state_rel(seeded=seeded)
+    name = "seeded state" if seeded else "live state"
+    try:
+        state = load_state(cfg.data_dir / rel)
+    except StateCorrupt as exc:
+        return Check(name, "FAIL", f"{rel}: corrupt ({exc.reason})")
+    if state is None:
+        return Check(name, "OK", f"{rel}: absent (next run is a baseline)")
+    return Check(
+        name,
+        "OK",
+        f"{rel}: seen={len(state.seen_ids)} pending={len(state.pending)}",
+    )
+
+
+def doctor_checks(cfg: AgentConfig, runner: CommandRunner) -> list[Check]:
+    """Runs every offline doctor check (no network, no model call).
+
+    Args:
+        cfg: The configuration.
+        runner: Used only for ``claude --version``.
+
+    Returns:
+        The checks, in display order.
+    """
+    py = sys.version_info
+    checks = [
+        Check(
+            "python",
+            "OK" if py >= (3, 12) else "FAIL",
+            f"{py.major}.{py.minor}.{py.micro}",
+        ),
+        Check("config", "OK", "loaded and validated"),
+        _check_claude(cfg, runner),
+        _check_resume(cfg),
+        _check_gitignore(cfg),
+        Check("allow-list", "OK", ", ".join(cfg.http.allowed_hosts)),
+    ]
+    data_rel = cfg.data_dir.relative_to(cfg.project_root.resolve()).as_posix()
+    if cfg.data_dir.is_dir():
+        writable = os.access(cfg.data_dir, os.W_OK)
+        checks.append(
+            Check(
+                "data dir",
+                "OK" if writable else "FAIL",
+                f"{data_rel}/ {'writable' if writable else 'not writable'}",
+            )
+        )
+    else:
+        checks.append(Check("data dir", "WARN", f"{data_rel}/ absent; created on run"))
+    checks += [_check_state(cfg, seeded=False), _check_state(cfg, seeded=True)]
+    return checks
+
+
+def _probe_model(cfg: AgentConfig) -> int:
+    """Runs WS4's one-call model probe and records it under ``data/doctor/``."""
+    backend = _component("job_search_agent.judge.backend")
+    clock = SystemClock()
+    out = _output_root(cfg)
+    facts = cast(
+        Mapping[str, JsonValue],
+        backend.probe_model(cfg, out, clock=clock, runner=SubprocessRunner()),
+    )
+    rel = f"doctor/{format_run_id(clock.now_utc())}.json"
+    out.write_json_atomic(rel, dict(facts), sort_keys=False)
+    print(f"[OK] probe-model: facts recorded in {cfg.repo_rel(rel)}")
+    for key in ("model_requested", "model_served", "session_id", "is_error"):
+        if key in facts:
+            print(f"  {key}: {json.dumps(facts[key])}")
+    return int(ExitCode.OK)
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    """``jsa doctor [--probe-model]``."""
+    cfg = _config(args)
+    checks = doctor_checks(cfg, SubprocessRunner())
+    for check in checks:
+        print(f"[{check.level}] {check.name}: {check.detail}")
+    if any(c.refused for c in checks):
+        return int(ExitCode.RESUME_REFUSED)
+    if any(c.level == "FAIL" for c in checks):
+        return int(ExitCode.CONFIG_ERROR)
+    if args.probe_model:
+        return _probe_model(cfg)
+    return int(ExitCode.OK)
+
+
+# --- pending ----------------------------------------------------------------------
+
+
+def cmd_pending_list(args: argparse.Namespace) -> int:
+    """``jsa pending list [--data live|seeded]``."""
+    cfg = _config(args)
+    rel = cfg.state_rel(seeded=args.data == "seeded")
+    state = load_state(cfg.data_dir / rel)
+    if state is None:
+        print(f"{rel}: absent (no baseline yet)")
+        return int(ExitCode.OK)
+    print(f"{rel}: {len(state.pending)} pending, {len(state.abandoned)} abandoned")
+    for p in state.pending:
+        print(
+            f"  {p.posting_id} last_status={p.last_status.value} "
+            f"attempts={p.attempts} queued={p.queued_run_id} "
+            f"last_attempt={p.last_attempt_run_id}"
+        )
+    for a in state.abandoned:
+        print(f"  [abandoned] {a.posting_id} dropped={a.dropped_at_utc.isoformat()}")
+    return int(ExitCode.OK)
+
+
+def cmd_pending_drop(args: argparse.Namespace) -> int:
+    """``jsa pending drop <posting_id> --reason TEXT [--data live|seeded]``."""
+    cfg = _config(args)
+    rel = cfg.state_rel(seeded=args.data == "seeded")
+    data = read_state_bytes(cfg.data_dir / rel)
+    if data is None:
+        raise ConfigError("no state file; nothing is pending")
+    state = parse_state(data)
+    try:
+        dropped = drop_pending(
+            state,
+            args.posting_id,
+            reason=args.reason,
+            dropped_at=SystemClock().now_utc(),
+        )
+    except KeyError as exc:
+        raise ConfigError("posting is not pending") from exc
+    except ValueError as exc:
+        raise ConfigError("a non-empty --reason is required") from exc
+    _output_root(cfg).write_bytes_atomic(rel, state_to_bytes(dropped))
+    print(f"dropped {args.posting_id} from pending in {rel} (decision recorded)")
+    return int(ExitCode.OK)
+
+
+# --- rule ---------------------------------------------------------------------------
+
+
+def cmd_rule(args: argparse.Namespace) -> int:
+    """``jsa rule --raw RAW --id ID``: print one posting's rule record (pure)."""
+    cfg = _config(args)
+    resume = _load_resume(cfg)
+    read = _reader(cfg)
+    provider = _provider(cfg)
+    evaluate, validate = _rule_functions()
+    board = provider.parse(read(cfg.project_root / _repo_rel(cfg, args.raw)))
+    matches = [p for p in board.postings if p.posting_id == args.posting_id]
+    if not matches:
+        raise ConfigError("posting id not found in the raw file")
+    posting = matches[0]
+    verdict = evaluate(posting, resume)
+    errors = validate(verdict, posting.raw, resume.to_dict())
+    record: dict[str, Any] = {
+        "posting_id": posting.posting_id,
+        "title": posting.title,
+        "location": posting.location_name,
+        "updated_at": posting.updated_at,
+        "rule_verdict": verdict.model_dump(mode="json"),
+        "rule_evidence_errors": errors,
+    }
+    print(json.dumps(record, indent=2, ensure_ascii=False))
+    return int(ExitCode.OK if not errors else ExitCode.PARTIAL_FAILURE)
+
+
+# --- verify-evidence / audit-privacy / docs --------------------------------------
+
+
+def cmd_verify_evidence(args: argparse.Namespace) -> int:
+    """``jsa verify-evidence``: re-hash every saved raw file against its meta."""
+    cfg = _config(args)
+    checks = verify_saved_evidence(cfg.project_root.resolve())
+    if not checks:
+        print("no saved raw evidence found")
+    for c in checks:
+        print(f"[{c.status.value}] {c.descriptor} -> {c.raw or '<invalid pointer>'}")
+    bad = [c for c in checks if c.status is not EvidenceStatus.OK]
+    return int(ExitCode.OK if not bad else ExitCode.PARTIAL_FAILURE)
+
+
+def cmd_audit_privacy(args: argparse.Namespace) -> int:
+    """``jsa audit-privacy [PATH]``: scan outputs with WS2's privacy scanner."""
+    cfg = _config(args)
+    target_rel = _repo_rel(cfg, args.path)
+    privacy = _component("job_search_agent.privacy")
+    values = privacy.sensitive_values(_load_resume(cfg))
+    findings: Sequence[object] = privacy.scan_tree(
+        cfg.project_root / target_rel, values
+    )
+    for finding in findings:
+        print(f"[FINDING] {finding}")
+    print(f"audit-privacy {target_rel}: {len(findings)} finding(s)")
+    return int(ExitCode.OK if not findings else ExitCode.PARTIAL_FAILURE)
+
+
+def collect_reports(data_dir: Path) -> list[RunReport]:
+    """Loads every ``runs/*/report.json`` under the data directory.
+
+    Args:
+        data_dir: The data directory.
+
+    Returns:
+        The reports (unparseable files are skipped).
+    """
+    reports: list[RunReport] = []
+    for path in sorted(data_dir.glob("*/runs/*/report.json")):
+        try:
+            reports.append(load_report(path.read_bytes()))
+        except (OSError, ValueError):
+            continue
+    return reports
+
+
+def cmd_docs_render(args: argparse.Namespace) -> int:
+    """``jsa docs render``: print ``docs/RUNS.md`` (live and seeded tables)."""
+    cfg = _config(args)
+    print(render_runs_markdown(collect_reports(cfg.data_dir)), end="")
+    return int(ExitCode.OK)
+
+
+# --- parser -----------------------------------------------------------------------
 
 
 def _add_run(sub: Subparsers) -> None:
-    """Registers ``jsa run``."""
     parser = sub.add_parser("run", help="fetch the board once, apply the rule, judge")
     parser.add_argument(
         "--replay",
@@ -64,61 +599,59 @@ def _add_run(sub: Subparsers) -> None:
         choices=("claude-cli", "none"),
         help="override [model].backend; 'none' marks every judgment UNAVAILABLE",
     )
-    parser.set_defaults(handler=_not_implemented("run", "WS3"))
+    parser.set_defaults(handler=cmd_run)
 
 
 def _add_doctor(sub: Subparsers) -> None:
-    """Registers ``jsa doctor``."""
     parser = sub.add_parser("doctor", help="offline environment and fixture checks")
     parser.add_argument(
         "--probe-model",
         action="store_true",
         help="make one tiny real model call and record the facts in data/doctor/",
     )
-    parser.set_defaults(handler=_not_implemented("doctor", "WS3"))
+    parser.set_defaults(handler=cmd_doctor)
 
 
 def _add_pending(sub: Subparsers) -> None:
-    """Registers ``jsa pending list|drop``."""
     parser = sub.add_parser("pending", help="inspect or drop pending judgments")
     actions = parser.add_subparsers(dest="pending_action", required=True)
     list_parser = actions.add_parser("list", help="list pending judgments")
     list_parser.add_argument("--data", choices=("live", "seeded"), default="live")
-    list_parser.set_defaults(handler=_not_implemented("pending list", "WS3"))
+    list_parser.set_defaults(handler=cmd_pending_list)
     drop_parser = actions.add_parser("drop", help="stop retrying one posting")
     drop_parser.add_argument("posting_id")
     drop_parser.add_argument("--reason", required=True, help="documented reason")
     drop_parser.add_argument("--data", choices=("live", "seeded"), default="live")
-    drop_parser.set_defaults(handler=_not_implemented("pending drop", "WS3"))
+    drop_parser.set_defaults(handler=cmd_pending_drop)
 
 
 def _add_rule(sub: Subparsers) -> None:
-    """Registers ``jsa rule``."""
     parser = sub.add_parser("rule", help="print the rule record for one posting")
     parser.add_argument("--raw", type=Path, required=True, metavar="RAW_JSON")
     parser.add_argument("--id", dest="posting_id", required=True)
-    parser.set_defaults(handler=_not_implemented("rule", "WS1"))
+    parser.set_defaults(handler=cmd_rule)
 
 
-def _add_verify_evidence(
-    sub: Subparsers,
-) -> None:
-    """Registers ``jsa verify-evidence``."""
+def _add_verify_evidence(sub: Subparsers) -> None:
     parser = sub.add_parser(
         "verify-evidence", help="recompute every saved raw sha256 against its meta"
     )
-    parser.set_defaults(handler=_not_implemented("verify-evidence", "WS3"))
+    parser.set_defaults(handler=cmd_verify_evidence)
 
 
-def _add_audit_privacy(
-    sub: Subparsers,
-) -> None:
-    """Registers ``jsa audit-privacy``."""
+def _add_audit_privacy(sub: Subparsers) -> None:
     parser = sub.add_parser(
         "audit-privacy", help="scan outputs for résumé values, credentials, abs paths"
     )
     parser.add_argument("path", type=Path, nargs="?", default=Path("data"))
-    parser.set_defaults(handler=_not_implemented("audit-privacy", "WS2"))
+    parser.set_defaults(handler=cmd_audit_privacy)
+
+
+def _add_docs(sub: Subparsers) -> None:
+    parser = sub.add_parser("docs", help="render generated documentation to stdout")
+    actions = parser.add_subparsers(dest="docs_action", required=True)
+    render = actions.add_parser("render", help="print docs/RUNS.md from report.json")
+    render.set_defaults(handler=cmd_docs_render)
 
 
 _REGISTRY: tuple[Callable[[Subparsers], None], ...] = (
@@ -128,20 +661,16 @@ _REGISTRY: tuple[Callable[[Subparsers], None], ...] = (
     _add_rule,
     _add_verify_evidence,
     _add_audit_privacy,
+    _add_docs,
 )
 
 
-def _register_experiments(
-    sub: Subparsers,
-) -> None:
+def _register_experiments(sub: Subparsers) -> None:
     """Adds ``jsa exp ...`` if the experiments package is installed.
 
-    Args:
-        sub: The top-level subparsers object.
-
     Raises:
-        ModuleNotFoundError: If the experiments module exists but one of *its* imports
-            is missing (a real bug, not an absent workstream).
+        ModuleNotFoundError: If the experiments module exists but one of *its*
+            imports is missing (a real bug, not an absent workstream).
     """
     try:
         module = importlib.import_module(_EXPERIMENTS_MODULE)
@@ -186,7 +715,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     Returns:
         The process exit code. Deliberate failures (``AgentError``) print their
-        content-free message and return their own exit code.
+        content-free message and return their own exit code; an unexpected I/O
+        error prints its error text (never a path) and returns 5.
     """
     args = build_parser().parse_args(argv)
     handler: Handler = args.handler
@@ -195,6 +725,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except AgentError as exc:
         print(f"jsa: {exc}", file=sys.stderr)
         return int(exc.exit_code)
+    except OSError as exc:
+        print(f"jsa: I/O error: {exc.strerror or type(exc).__name__}", file=sys.stderr)
+        return int(ExitCode.CONFIG_ERROR)
 
 
 if __name__ == "__main__":
