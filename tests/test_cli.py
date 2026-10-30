@@ -382,6 +382,17 @@ def test_doctor_resume_refusal_exit_3(
     assert "DIGEST_MISMATCH" in capsys.readouterr().out
 
 
+def test_doctor_missing_resume_module_is_config_error(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def missing(cfg: AgentConfig) -> VerifiedResume:
+        raise ConfigError("component not installed: job_search_agent.resume")
+
+    monkeypatch.setattr(cli, "_load_resume", missing)
+    monkeypatch.setattr(shutil, "which", lambda name: None)
+    assert jsa(project, "doctor") == int(ExitCode.CONFIG_ERROR)
+
+
 def test_doctor_gitignore_missing_rule_fails(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

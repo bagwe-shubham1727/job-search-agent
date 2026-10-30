@@ -309,6 +309,8 @@ class Check:
     level: str
     """``OK``, ``WARN``, ``SKIP`` or ``FAIL``."""
     detail: str
+    refused: bool = False
+    """True only when the résumé gate refused the fixture (exit 3)."""
 
 
 def _check_claude(cfg: AgentConfig, runner: CommandRunner) -> Check:
@@ -339,7 +341,8 @@ def _check_resume(cfg: AgentConfig) -> Check:
     try:
         _load_resume(cfg)
     except ResumeRefused as exc:
-        return Check("resume", "FAIL", "refused: " + ", ".join(sorted(exc.codes)))
+        codes = ", ".join(sorted(exc.codes))
+        return Check("resume", "FAIL", f"refused: {codes}", refused=True)
     except ConfigError as exc:
         return Check("resume", "FAIL", str(exc))
     return Check(
@@ -440,7 +443,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     checks = doctor_checks(cfg, SubprocessRunner())
     for check in checks:
         print(f"[{check.level}] {check.name}: {check.detail}")
-    if any(c.name == "resume" and c.level == "FAIL" for c in checks):
+    if any(c.refused for c in checks):
         return int(ExitCode.RESUME_REFUSED)
     if any(c.level == "FAIL" for c in checks):
         return int(ExitCode.CONFIG_ERROR)
