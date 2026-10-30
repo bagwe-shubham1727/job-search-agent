@@ -62,13 +62,12 @@ class Rate(_Out):
     wilson_high: float | None
 
 
-def wilson_interval(k: int, n: int, z: float = Z_95) -> tuple[float, float]:
+def wilson_interval(k: int, n: int) -> tuple[float, float]:
     """Wilson score interval for a binomial proportion.
 
     Args:
         k: Successes, ``0 <= k <= n``.
         n: Trials, ``n > 0``.
-        z: Normal quantile (95% by default).
 
     Returns:
         ``(low, high)``, both within ``[0, 1]``.
@@ -78,6 +77,7 @@ def wilson_interval(k: int, n: int, z: float = Z_95) -> tuple[float, float]:
     """
     if n <= 0 or not 0 <= k <= n:
         raise ValueError("need n > 0 and 0 <= k <= n")
+    z = Z_95
     p = k / n
     z2 = z * z
     denominator = 1 + z2 / n

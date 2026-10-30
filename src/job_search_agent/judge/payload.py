@@ -24,35 +24,14 @@ from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from job_search_agent.models import Posting, VerifiedResume
+from job_search_agent.resume import REQUIRED_SKILL_KEYS, TARGET_KEYS
 from job_search_agent.text import clean_html
-
-TARGET_KEYS: tuple[str, ...] = ("roles", "levels", "locations", "excluded")
-"""The four ``$.target`` arrays, in contract order (CONTRACT §4)."""
-
-SKILL_KEYS: tuple[str, ...] = (
-    "languages",
-    "frontend",
-    "backend",
-    "data",
-    "messaging",
-    "cloud_devops",
-    "observability",
-    "familiar_with_not_shipped",
-)
-"""The eight ``$.skills`` arrays. ``familiar_with_not_shipped`` is sent so Claude sees
-the whole skills section, but the rule never counts it."""
 
 BULLET_SECTIONS: tuple[str, ...] = ("experience", "projects")
 
 
 class PayloadError(ValueError):
     """The verified résumé lacks a field the projection needs (a gate bug)."""
-
-
-def _require_verified(resume: object) -> VerifiedResume:
-    if not isinstance(resume, VerifiedResume):
-        raise TypeError("the judge accepts only a VerifiedResume (CONTRACT §12)")
-    return resume
 
 
 def _string_list(value: object, where: str) -> list[str]:
@@ -65,23 +44,24 @@ def build_resume_payload(resume: VerifiedResume) -> dict[str, Any]:
     """Projects the verified résumé onto the fields Claude may see.
 
     Args:
-        resume: The verified fixture; any other type is refused.
+        resume: The verified fixture (the judge checks its type).
 
     Returns:
         A fresh dict with ``target``, ``skills``, ``experience`` and ``projects``.
 
     Raises:
-        TypeError: If ``resume`` is not a ``VerifiedResume``.
         PayloadError: If a projected field is missing or has the wrong type.
     """
-    data = _require_verified(resume).to_dict()
+    data = resume.to_dict()
     target = data.get("target")
     skills = data.get("skills")
     if not isinstance(target, Mapping) or not isinstance(skills, Mapping):
         raise PayloadError("target and skills must be objects")
     payload: dict[str, Any] = {
         "target": {k: _string_list(target.get(k), f"target.{k}") for k in TARGET_KEYS},
-        "skills": {k: _string_list(skills.get(k), f"skills.{k}") for k in SKILL_KEYS},
+        "skills": {
+            k: _string_list(skills.get(k), f"skills.{k}") for k in REQUIRED_SKILL_KEYS
+        },
     }
     for section in BULLET_SECTIONS:
         entries = data.get(section)

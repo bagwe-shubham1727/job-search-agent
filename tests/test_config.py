@@ -92,12 +92,6 @@ def test_state_path_outside_data_dir_refused(tmp_path: Path, state_file: str) ->
         load_config(_write(tmp_path, state_file=state_file))
 
 
-def test_state_override_outside_data_dir_refused(tmp_path: Path) -> None:
-    path = _write(tmp_path)
-    with pytest.raises(ConfigError, match="state_file"):
-        load_config(path, overrides=ConfigOverrides(state_file="../x.json"))
-
-
 def test_data_dir_outside_project_refused(tmp_path: Path) -> None:
     path = _write(tmp_path)
     with pytest.raises(ConfigError, match="data.dir"):
@@ -107,12 +101,12 @@ def test_data_dir_outside_project_refused(tmp_path: Path) -> None:
 def test_overrides_applied(tmp_path: Path) -> None:
     config = load_config(
         _write(tmp_path),
-        overrides=ConfigOverrides(
-            state_file="alt/state.json", resume_path="private/me.json"
-        ),
+        overrides=ConfigOverrides(data_dir="data/scratch", model_backend="claude-cli"),
     )
-    assert config.state_rel(seeded=False) == "alt/state.json"
-    assert config.resume_path == tmp_path.resolve() / "private" / "me.json"
+    assert config.data_dir == tmp_path.resolve() / "data" / "scratch"
+    assert config.state_rel(seeded=False) == "live/state.json"
+    assert config.repo_rel("live/x.json") == "data/scratch/live/x.json"
+    assert config.model.backend == "claude-cli"
 
 
 def test_missing_pin_is_none_not_config_error(tmp_path: Path) -> None:

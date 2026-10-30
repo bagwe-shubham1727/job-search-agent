@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
-from job_search_agent.clock import FixedClock, SystemClock, format_run_id, to_eastern
+from job_search_agent.clock import SystemClock, format_run_id, to_eastern
 from job_search_agent.models import RUN_ID_PATTERN
 
 
@@ -26,15 +26,6 @@ def test_run_id_converts_to_utc() -> None:
 def test_naive_datetimes_rejected() -> None:
     with pytest.raises(ValueError, match="aware"):
         format_run_id(datetime(2026, 10, 30))
-    with pytest.raises(ValueError, match="aware"):
-        FixedClock(datetime(2026, 10, 30))
-
-
-def test_fixed_clock_steps() -> None:
-    start = datetime(2026, 10, 30, 2, 11, 7, tzinfo=UTC)
-    clock = FixedClock(start, step=timedelta(seconds=2))
-    assert [clock.now_utc(), clock.now_utc()] == [start, start + timedelta(seconds=2)]
-    assert FixedClock(start).now_utc() == FixedClock(start).now_utc()
 
 
 def test_to_eastern_crosses_calendar_day() -> None:

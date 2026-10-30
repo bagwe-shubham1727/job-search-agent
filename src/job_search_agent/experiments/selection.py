@@ -60,7 +60,6 @@ HANDCHECK_IDS: tuple[str, ...] = (
 """The five CONTRACT §13 postings (the sampling set), excluded from selection."""
 
 SETS: tuple[str, ...] = ("dev", "heldout")
-SetName = Literal["dev", "heldout"]
 
 Evaluate = Callable[[Posting], RuleVerdict]
 """The deterministic rule for one posting (WS1 ``evaluate`` with the résumé bound)."""
@@ -125,30 +124,24 @@ def select_postings(
     evaluate: Evaluate,
     *,
     seed: int = SEED,
-    quotas: Mapping[str, int] = QUOTAS,
-    exclude: Iterable[str] = HANDCHECK_IDS,
 ) -> Selection:
-    """Draws the dev and held-out sets.
+    """Draws the dev and held-out sets (``QUOTAS``; the §13 postings never drawn).
 
     Args:
         postings: Every posting of the source board.
         evaluate: The rule.
         seed: Random seed.
-        quotas: Quota per stratum (even numbers).
-        exclude: IDs never drawn.
 
     Returns:
         The selection.
 
     Raises:
-        ExperimentError: If a stratum's pool is smaller than its quota, or a quota
-            is odd.
+        ExperimentError: If a stratum's pool is smaller than its quota.
     """
-    excluded = set(exclude)
     pools: dict[str, list[str]] = {s: [] for s in STRATA}
     verdicts: dict[str, RuleVerdict] = {}
     for posting in postings:
-        if posting.posting_id in excluded:
+        if posting.posting_id in HANDCHECK_IDS:
             continue
         verdict = evaluate(posting)
         stratum = classify_stratum(verdict)
@@ -156,9 +149,9 @@ def select_postings(
             pools[stratum].append(posting.posting_id)
             verdicts[posting.posting_id] = verdict
     short = [
-        f"{s}: {len(pools[s])} < {quotas[s]}"
+        f"{s}: {len(pools[s])} < {QUOTAS[s]}"
         for s in STRATA
-        if len(pools[s]) < quotas[s]
+        if len(pools[s]) < QUOTAS[s]
     ]
     if short:
         raise ExperimentError("stratum pool smaller than quota: " + "; ".join(short))
@@ -167,9 +160,7 @@ def select_postings(
     heldout: list[str] = []
     facts: dict[str, RuleFacts] = {}
     for stratum in STRATA:
-        quota = quotas[stratum]
-        if quota % 2:
-            raise ExperimentError(f"quota for {stratum} must be even")
+        quota = QUOTAS[stratum]
         candidates = sorted(pools[stratum], key=int)
         drawn = rng.sample(candidates, quota)
         rng.shuffle(drawn)
@@ -383,20 +374,3 @@ def validate_label_file(
     if problems:
         raise ExperimentError(f"{expected_set} labels rejected: " + "; ".join(problems))
     return parsed
-
-
-__all__ = [
-    "HANDCHECK_IDS",
-    "QUOTAS",
-    "SEED",
-    "STRATA",
-    "HandLabel",
-    "LabelFile",
-    "RuleFacts",
-    "Selection",
-    "classify_stratum",
-    "label_template",
-    "render_worksheet",
-    "select_postings",
-    "validate_label_file",
-]

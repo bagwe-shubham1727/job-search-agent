@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from job_search_agent.config import ConfigOverrides, load_config
+from job_search_agent.config import load_config
 from job_search_agent.errors import ConfigError, PathRejected, RunLocked
 from job_search_agent.fsio import (
     OutputRoot,
@@ -261,14 +261,14 @@ def test_read_policy_resolves_symlinks(tmp_path: Path) -> None:
 
 
 def test_state_path_outside_data_dir_refused(tmp_path: Path) -> None:
-    config = REPO_ROOT / "config" / "agent.toml"
+    text = (REPO_ROOT / "config" / "agent.toml").read_text(encoding="utf-8")
+    config = tmp_path / "agent.toml"
     for state_file in ("../state.json", "../../state.json", "/var/state.json"):
-        with pytest.raises(ConfigError):
-            load_config(
-                config,
-                project_root=REPO_ROOT,
-                overrides=ConfigOverrides(state_file=state_file),
-            )
+        config.write_text(
+            text.replace('"live/state.json"', f'"{state_file}"', 1), encoding="utf-8"
+        )
+        with pytest.raises(ConfigError, match="state_file"):
+            load_config(config, project_root=REPO_ROOT)
     data = tmp_path / "data"
     data.mkdir()
     with pytest.raises(PathRejected):

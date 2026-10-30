@@ -21,7 +21,6 @@ from typing import Any
 import pytest
 
 from job_search_agent import cli
-from job_search_agent.clock import FixedClock
 from job_search_agent.config import AgentConfig, ConfigOverrides, load_config
 from job_search_agent.evidence_validator import validate_rule_evidence
 from job_search_agent.experiments._wiring import Wiring
@@ -45,7 +44,13 @@ from job_search_agent.pipeline import run_once
 from job_search_agent.privacy import scan_tree, sensitive_values
 from job_search_agent.resume import load_verified_resume
 from tests.conftest import HANDCHECK_META_REL, REPO_ROOT, RESUME_FIXTURE_REL
-from tests.fakes import FakeRunner, RecordingTransport, Reply, mock_transport
+from tests.fakes import (
+    FakeRunner,
+    FixedClock,
+    RecordingTransport,
+    Reply,
+    mock_transport,
+)
 from tests.ws3_doubles import (
     CONSTRUCTED_ID,
     VALID_REPLY,

@@ -70,8 +70,9 @@ def test_first_valid_no_retry(tmp_path: Path) -> None:
     assert judgment.evidence[0].resume_path == "$.skills.languages[2]"
     assert backend.calls == 1
     assert list(writer.json) == [f"{LOG_DIR}/attempt-1.json"]
-    assert judgment.diagnostic.raw_log_refs == [f"data/{LOG_DIR}/attempt-1.json"]
-    assert judgment.diagnostic.first_reply_valid is True
+    (attempt,) = judgment.diagnostic.attempts
+    assert attempt.raw_log_ref == f"data/{LOG_DIR}/attempt-1.json"
+    assert attempt.validation_passed is True
     assert judgment.diagnostic.prompt_sha256 == PROMPT.sha256
 
 
@@ -84,7 +85,6 @@ def test_invalid_then_valid_both_attempts_logged_first_flagged(tmp_path: Path) -
     assert first.first_reply and not second.first_reply
     assert first.validation_passed is False and "CODE_FENCE" in first.validation_codes
     assert second.validation_passed is True
-    assert judgment.diagnostic.first_reply_valid is False
     log1, log2 = _log(writer, 1), _log(writer, 2)
     assert log1["first_reply"] is True and log2["first_reply"] is False
     assert log1["validation"] == {"passed": False, "codes": ["CODE_FENCE"]}

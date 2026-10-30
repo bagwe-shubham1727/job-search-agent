@@ -560,16 +560,6 @@ class JudgmentDiagnostic(FrozenModel):
     ``"judge_raised:PathRejected"`` (review fix 1). Omitted from JSON when unset, so
     ordinary records keep their exact shape."""
 
-    @property
-    def raw_log_refs(self) -> list[str]:
-        """Repo-relative paths of every attempt's raw-reply log, in attempt order."""
-        return [a.raw_log_ref for a in self.attempts]
-
-    @property
-    def first_reply_valid(self) -> bool | None:
-        """Whether attempt 1 passed validation; ``None`` if no reply was received."""
-        return self.attempts[0].validation_passed if self.attempts else None
-
 
 class ModelJudgment(FrozenModel):
     """Claude's opinion as stored in a record (CONTRACT §7, §8).

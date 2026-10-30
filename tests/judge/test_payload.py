@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from job_search_agent.jsonpath import resolve
 from job_search_agent.judge.payload import (
     build_posting_payload,
@@ -56,11 +54,6 @@ def test_resume_payload_preserves_indices() -> None:
     for path in paths:
         assert resolve(payload, path) == resolve(original, path), path
     assert resolve(payload, "$.skills.backend[4]") == "GraphQL"
-
-
-def test_resume_payload_rejects_unverified_mapping() -> None:
-    with pytest.raises(TypeError):
-        build_resume_payload(fixture_resume().to_dict())  # type: ignore[arg-type]
 
 
 def test_posting_payload_fields_only() -> None:

@@ -15,7 +15,8 @@ from job_search_agent.privacy import (
     scan_tree,
     sensitive_values,
 )
-from job_search_agent.resume import PERSONA_LABEL, skill_entries
+from job_search_agent.resume import PERSONA_LABEL
+from job_search_agent.rule.skills import skill_entries_from_resume
 
 
 def _by_path(resume: VerifiedResume) -> dict[str, SensitiveValue]:
@@ -42,7 +43,9 @@ def test_sensitive_values_cover_contacts_bullets_institutions_employers(
     assert len(bullet_paths) == 10
     for path in bullet_paths:
         assert values[path].category == "bullet"
-    skill_terms = {entry.term for entry in skill_entries(verified_resume)}
+    skill_terms = {
+        entry.term for entry in skill_entries_from_resume(verified_resume.to_dict())
+    }
     assert not skill_terms & {value.value for value in values.values()}
 
 
@@ -73,7 +76,7 @@ def test_scan_reports_location_not_value(verified_resume: VerifiedResume) -> Non
 def test_skill_terms_and_persona_label_allowed(
     verified_resume: VerifiedResume,
 ) -> None:
-    entries = skill_entries(verified_resume)
+    entries = skill_entries_from_resume(verified_resume.to_dict())
     text = "\n".join(
         [f"persona: {PERSONA_LABEL}", "location: Boston, MA"]
         + [f"matched {e.term} at {e.resume_path}" for e in entries]
@@ -156,11 +159,6 @@ def test_scan_tree_reports_relative_locations(
         root / "live" / "runs" / "leak.md", sensitive_values(verified_resume)
     )
     assert [f.location for f in single] == ["leak.md"]
-
-
-def test_sensitive_values_requires_verified_resume() -> None:
-    with pytest.raises(TypeError):
-        sensitive_values({"personal": {}})  # type: ignore[arg-type]
 
 
 def test_allow_never_hides_a_longer_value_that_contains_it(

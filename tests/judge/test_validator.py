@@ -307,11 +307,7 @@ def test_path_findings_counts_parseable_reply_even_if_schema_fails() -> None:
     text = _dump(valid_reply(label="maybe", evidence=[good, bad, "junk"]))
     findings = evidence_path_findings(text, RESUME, POSTING)
     assert findings is not None
-    assert (findings.entries, findings.valid_entries, findings.has_bad_path) == (
-        2,
-        1,
-        True,
-    )
+    assert (findings.entries, findings.valid_entries) == (2, 1)
 
 
 def test_path_findings_none_for_unparseable() -> None:

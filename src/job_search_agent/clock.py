@@ -8,7 +8,7 @@ Run IDs are the run's UTC start time truncated to seconds, formatted
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 EASTERN = ZoneInfo("America/New_York")
@@ -74,30 +74,3 @@ class SystemClock:
     def now_utc(self) -> datetime:
         """Returns the current time in UTC."""
         return datetime.now(UTC)
-
-
-class FixedClock:
-    """A deterministic clock for tests and reproducible runs.
-
-    Each call to ``now_utc`` returns the current instant and then advances it by
-    ``step``, so a run's start and finish times differ predictably.
-
-    Args:
-        start: First instant returned; must be timezone-aware.
-        step: Amount to advance after each call (default: never advance).
-
-    Raises:
-        ValueError: If ``start`` is naive or ``step`` is negative.
-    """
-
-    def __init__(self, start: datetime, *, step: timedelta = timedelta(0)) -> None:
-        if step < timedelta(0):
-            raise ValueError("step must not be negative")
-        self._next = _require_aware(start)
-        self._step = step
-
-    def now_utc(self) -> datetime:
-        """Returns the current fixed instant (UTC), then advances by ``step``."""
-        current = self._next
-        self._next = current + self._step
-        return current

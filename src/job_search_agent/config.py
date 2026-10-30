@@ -105,15 +105,11 @@ class ConfigOverrides:
     """CLI overrides applied on top of the file before validation.
 
     Attributes:
-        data_dir: Replaces ``[data].dir``.
-        state_file: Replaces ``[data].state_file`` (relative to the data dir).
-        resume_path: Replaces ``[resume].path``.
-        model_backend: Replaces ``[model].backend``.
+        data_dir: Replaces ``[data].dir`` (``--data-dir``).
+        model_backend: Replaces ``[model].backend`` (``--model-backend``).
     """
 
     data_dir: str | None = None
-    state_file: str | None = None
-    resume_path: str | None = None
     model_backend: ModelBackendKind | None = None
 
 
@@ -254,8 +250,6 @@ def load_config(
 
     if overrides is not None:
         _apply(sections, "data", "dir", overrides.data_dir)
-        _apply(sections, "data", "state_file", overrides.state_file)
-        _apply(sections, "resume", "path", overrides.resume_path)
         _apply(sections, "model", "backend", overrides.model_backend)
 
     try:

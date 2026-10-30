@@ -20,14 +20,14 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final
 
 from job_search_agent.errors import ConfigError, PathRejected, ResumeRefused
 from job_search_agent.fsio import relative_within
-from job_search_agent.models import RefusalCode, SkillEntry, VerifiedResume
-from job_search_agent.rule.skills import SKILL_PATHS, skill_entries_from_resume
+from job_search_agent.models import RefusalCode, VerifiedResume
+from job_search_agent.rule.skills import SKILL_PATHS
 from job_search_agent.strict_json import reject_constant, reject_duplicate_keys
 
 PERSONA_NAME: Final = "Kiran Joshi"
@@ -230,59 +230,3 @@ def load_verified_resume(
     return VerifiedResume(
         doc, sha256=digest, source_path=source_path, token=_GATE_TOKEN
     )
-
-
-def _require_verified(resume: object) -> VerifiedResume:
-    """Runtime guard: only a ``VerifiedResume`` is accepted (mypy checks it too)."""
-    if not isinstance(resume, VerifiedResume):
-        raise TypeError("a VerifiedResume is required")
-    return resume
-
-
-def skill_entries(resume: VerifiedResume) -> tuple[SkillEntry, ...]:
-    """Lists every countable skill with its JSON path, in §4 order.
-
-    ``$.skills.familiar_with_not_shipped`` is excluded (§4). The extraction itself is
-    the rule's (``rule.skills.skill_entries_from_resume``), so both see the same list.
-
-    Args:
-        resume: The verified résumé.
-
-    Returns:
-        For example ``SkillEntry("GraphQL", "$.skills.backend[4]")`` among others.
-
-    Raises:
-        TypeError: If ``resume`` is not a ``VerifiedResume``.
-    """
-    return skill_entries_from_resume(_require_verified(resume).to_dict())
-
-
-def target_roles(resume: VerifiedResume) -> tuple[str, ...]:
-    """Returns ``$.target.roles[*]`` in order (the rule's role phrases, §4).
-
-    Args:
-        resume: The verified résumé.
-
-    Returns:
-        The role phrases.
-
-    Raises:
-        TypeError: If ``resume`` is not a ``VerifiedResume``.
-    """
-    roles: list[str] = _require_verified(resume).to_dict()["target"]["roles"]
-    return tuple(roles)
-
-
-def resume_data(resume: VerifiedResume) -> Mapping[str, Any]:
-    """Returns a deep copy of the verified JSON (for path resolution by validators).
-
-    Args:
-        resume: The verified résumé.
-
-    Returns:
-        An independent copy.
-
-    Raises:
-        TypeError: If ``resume`` is not a ``VerifiedResume``.
-    """
-    return _require_verified(resume).to_dict()

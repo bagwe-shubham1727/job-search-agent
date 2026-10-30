@@ -160,11 +160,7 @@ def sensitive_values(resume: VerifiedResume) -> tuple[SensitiveValue, ...]:
     Returns:
         The values with their categories and JSON paths.
 
-    Raises:
-        TypeError: If ``resume`` is not a ``VerifiedResume``.
     """
-    if not isinstance(resume, VerifiedResume):
-        raise TypeError("a VerifiedResume is required")
     doc = resume.to_dict()
     found: list[SensitiveValue] = []
 

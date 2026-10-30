@@ -319,15 +319,6 @@ def test_judgment_outcome_validity() -> None:
     assert not JudgmentOutcome("1", ModelJudgment(status=JudgmentStatus.ERROR)).is_valid
 
 
-def test_diagnostic_derived_fields() -> None:
-    diagnostic = _valid_judgment().diagnostic
-    assert diagnostic.raw_log_refs == [
-        f"data/live/runs/{RUN}/model/8249901/attempt-1.json"
-    ]
-    assert diagnostic.first_reply_valid is True
-    assert JudgmentDiagnostic().first_reply_valid is None
-
-
 @pytest.mark.parametrize(
     "overrides",
     [

@@ -17,9 +17,8 @@ from job_search_agent.resume import (
     PERSONA_LABEL,
     default_project_root,
     load_verified_resume,
-    skill_entries,
-    target_roles,
 )
+from job_search_agent.rule.skills import skill_entries_from_resume
 from tests.conftest import PINNED_RESUME_SHA256, REPO_ROOT, RESUME_FIXTURE_REL
 
 # The independent pin: typed here by hand from the committed bytes, never computed.
@@ -273,7 +272,7 @@ def test_refusal_message_contains_no_resume_values() -> None:
 
 
 def test_skill_entries_order_and_exclusion(verified_resume: VerifiedResume) -> None:
-    entries = skill_entries(verified_resume)
+    entries = skill_entries_from_resume(verified_resume.to_dict())
     assert entries[0] == SkillEntry("TypeScript", "$.skills.languages[0]")
     assert SkillEntry("C#", "$.skills.languages[5]") in entries
     assert SkillEntry("GraphQL", "$.skills.backend[4]") in entries
@@ -292,24 +291,6 @@ def test_skill_entries_order_and_exclusion(verified_resume: VerifiedResume) -> N
         "$.skills.cloud_devops",
         "$.skills.observability",
     ]
-
-
-def test_target_roles(verified_resume: VerifiedResume) -> None:
-    assert target_roles(verified_resume) == (
-        "Software Engineer",
-        "Full-Stack Software Engineer",
-        "Backend Engineer",
-        "Frontend Engineer",
-    )
-
-
-def test_judge_rejects_unverified_mapping() -> None:
-    """Helpers handing résumé content onward refuse a plain mapping at runtime."""
-    raw = _fixture_doc()
-    with pytest.raises(TypeError):
-        skill_entries(raw)  # type: ignore[arg-type]
-    with pytest.raises(TypeError):
-        target_roles(raw)  # type: ignore[arg-type]
 
 
 def test_persona_label_has_no_name() -> None:

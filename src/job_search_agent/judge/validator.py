@@ -119,11 +119,6 @@ class PathFindings:
     entries: int
     valid_entries: int
 
-    @property
-    def has_bad_path(self) -> bool:
-        """True when at least one entry cites a path that does not exist."""
-        return self.valid_entries < self.entries
-
 
 def _framing_codes(text: str) -> list[RejectionCode]:
     """Returns the framing problems of ``text`` (empty list when the frame is ok)."""

@@ -454,7 +454,12 @@ def test_resume_gate_reads_through_the_read_policy(tmp_path: Path) -> None:
     )
     good = load_config(config)
     assert cli._load_resume(good).source_path == good.resume.path
-    bad = load_config(config, overrides=ConfigOverrides(resume_path=under_src))
+    toml = config.read_text(encoding="utf-8")
+    config.write_text(
+        toml.replace('"persona/kiran-joshi.resume.example.json"', f'"{under_src}"'),
+        encoding="utf-8",
+    )
+    bad = load_config(config)
     with pytest.raises(ConfigError):
         cli._load_resume(bad)
 

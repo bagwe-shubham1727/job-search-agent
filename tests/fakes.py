@@ -10,12 +10,11 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
 
-from job_search_agent.clock import FixedClock
 from job_search_agent.models import (
     Availability,
     BackendErrorKind,
@@ -37,6 +36,42 @@ __all__ = [
 
 FAKE_MODEL_LABEL = "claude-sonnet-5-5"
 _FAKE_STARTED = datetime(2026, 10, 30, 2, 11, 7, tzinfo=UTC)
+
+
+# --- clock ----------------------------------------------------------------
+
+
+def _aware_utc(instant: datetime) -> datetime:
+    if instant.tzinfo is None or instant.utcoffset() is None:
+        raise ValueError("datetime must be timezone-aware")
+    return instant.astimezone(UTC)
+
+
+class FixedClock:
+    """A deterministic clock for tests and reproducible runs.
+
+    Each call to ``now_utc`` returns the current instant and then advances it by
+    ``step``, so a run's start and finish times differ predictably.
+
+    Args:
+        start: First instant returned; must be timezone-aware.
+        step: Amount to advance after each call (default: never advance).
+
+    Raises:
+        ValueError: If ``start`` is naive or ``step`` is negative.
+    """
+
+    def __init__(self, start: datetime, *, step: timedelta = timedelta(0)) -> None:
+        if step < timedelta(0):
+            raise ValueError("step must not be negative")
+        self._next = _aware_utc(start)
+        self._step = step
+
+    def now_utc(self) -> datetime:
+        """Returns the current fixed instant (UTC), then advances by ``step``."""
+        current = self._next
+        self._next = current + self._step
+        return current
 
 
 # --- model backend ----------------------------------------------------------
