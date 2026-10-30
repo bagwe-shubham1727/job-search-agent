@@ -159,3 +159,42 @@ and TA usability.
 
 **02:35 Sampling deliberately not run yet.** Chapter 1 asks for the student's prediction to be written before the run.
 Claude is waiting for that one line rather than running first.
+
+**02:45 Ponytail audit result.** The audit found 6 must-fixes:
+- no README;
+- trial runs would rewrite graded `data/`;
+- the surfaces `capture` could drop a surface;
+- "repo unchanged" was false after any commit;
+- all-INVALID samples were reported as "unanimous and wrong";
+- a crash mid-study blocked its table.
+
+It also found about 1,000 lines of removable code and tests: toy doubles in the pipeline tests, injection hooks, dead
+code, four Protocol copies of one writer, two state readers, tests of fakes, and an "unreviewed" location snapshot.
+Claude chose to fix everything except the README (written later, in the docs phase) and to delete the snapshot,
+keeping the independent oracle that parses CONTRACT §6.4.
+
+**02:50–03:10 Audit fixes** (`b3f3d30..7188965`, 13 commits, a fresh fix agent).
+- New `--data-dir` (trial runs go to the gitignored `data/scratch`).
+- Experiment-harness bug fixes, each with a regression test.
+- Pipeline tests now run on the real provider, rule, validator, `OutputRoot` and judge.
+- src net −296 lines, tests net −615 Python lines plus −2,897 lines of snapshot JSON.
+- Gate: 970 passed, 1 skipped (the v2-prompt test, which waits for the student's v2); meta 3 passed.
+
+Claude removed the four merged agent worktrees and their branches, after confirming each was an ancestor of main.
+
+**03:11–03:13 Chapter 3, action surfaces** (`8fea85b`), real `claude -p` sessions at commit `7188965`.
+- (a) No tools: reply valid under §8; nothing read, written or sent.
+- (b) Read on two sandbox files: read exactly those two; reply valid.
+- (c) WebFetch limited to boards-api.greenhouse.io plus Edit on sandbox `state.json`, `dontAsk`: 5 fetches,
+  1 read, 1 write, 0 denials. The 6 IDs the agent added matched an independent allow-listed fetch exactly
+  (missing 0, extra 0, malformed 0).
+- Repo unchanged for all three.
+
+`audit-privacy` then flagged 15 absolute project-root paths in the Claude Code transcripts. Claude replaced them with
+`<repo>` as a recorded transformation (`REDACTIONS.json`: per-file sha256 before and after). The 62 remaining findings
+are the fictional persona's bullets inside the payloads of surfaces (a) and (b), which are those surfaces' input by
+design.
+
+**03:15 Docs agent blocked.** Spawning a documentation agent (README, NETWORK, TRACEABILITY, experiment docs, a
+SOURCES.md draft, FRICTIONAL.md headings) was denied by Claude Code's auto-mode classifier ("Auto-Mode Bypass").
+Claude did not work around it and asked the student how to proceed.
