@@ -5,18 +5,22 @@
   time. Each is a separate CLI process with ``--no-session-persistence``; there are
   no retries, so every reply scored is a first reply.
 * One sampling study: outputs live at fixed paths under
-  ``data/experiments/sampling/`` and ``run`` refuses if it has already started.
+  ``data/experiments/sampling/`` and ``run`` refuses if it has already started. The
+  manifest is rewritten after every call with ``"complete": false`` (``true`` only
+  at the end), so a crash keeps the calls made and ``table`` reports them, marked
+  as an incomplete study.
 * ``table`` refuses to report if two calls share a session ID, the evidence that
   each conversation was fresh. Calls without a session ID (failed spawns) are counted
   and reported.
 
-Headline phrasing: repeatable is not correct. A unanimous wrong label is called out.
+Headline phrasing: repeatable is not correct. A unanimous wrong label is called out;
+a posting whose every reply was INVALID is a format or outage case, not a wrong label.
 """
 
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
@@ -26,7 +30,9 @@ from job_search_agent.experiments._io import (
     STUDENT_MARKER,
     ExperimentContext,
     ExperimentError,
+    is_complete,
     read_json,
+    record_calls,
 )
 from job_search_agent.experiments.metrics import INVALID, Rate, rate
 from job_search_agent.experiments.selection import HANDCHECK_IDS
@@ -35,7 +41,6 @@ from job_search_agent.models import Posting, VerdictLabel
 
 OUT = "experiments/sampling"
 MANIFEST = f"{OUT}/manifest.json"
-STARTED = f"{OUT}/STARTED.json"
 SPREAD = f"{OUT}/spread.json"
 TABLES = f"{OUT}/SAMPLING.tables.md"
 HAND_LABELS_REL = "experiments/sampling/hand_labels.json"
@@ -96,7 +101,7 @@ def cmd_sampling_run(
         ExperimentError: If sampling has already started, the prompt is not v1, or a
             §13 posting is missing.
     """
-    if ctx.data_exists(STARTED) or ctx.data_exists(MANIFEST):
+    if ctx.data_exists(MANIFEST):
         raise ExperimentError("sampling has already run; it runs once only")
     if prompt.version != "v1":
         raise ExperimentError("sampling uses prompt v1 only")
@@ -113,19 +118,17 @@ def cmd_sampling_run(
         "code_commit": ctx.git.head(),
         "code_dirty": ctx.git.is_dirty(),
     }
-    ctx.writer.write_json_atomic(STARTED, started)
-    calls: list[SampledCall] = []
-    for k, pid in call_order(n):
-        record = judge_call(postings[pid], prompt, f"{OUT}/calls/{pid}/{k}")
-        calls.append(SampledCall(k=k, call=record))
-    manifest = {
-        **started,
-        "finished_at_utc": ctx.clock.now_utc().isoformat(),
-        "retry": "none (first reply only)",
-        "calls": [c.model_dump(mode="json") for c in calls],
-    }
-    ctx.writer.write_json_atomic(MANIFEST, manifest)
-    return manifest
+
+    def call(k: int, pid: str) -> Callable[[], dict[str, Any]]:
+        def make() -> dict[str, Any]:
+            record = judge_call(postings[pid], prompt, f"{OUT}/calls/{pid}/{k}")
+            return SampledCall(k=k, call=record).model_dump(mode="json")
+
+        return make
+
+    return record_calls(
+        ctx, MANIFEST, started, (call(k, pid) for k, pid in call_order(n))
+    )
 
 
 def check_distinct_sessions(calls: Sequence[CallRecord]) -> int:
@@ -163,6 +166,9 @@ class PostingSpread(_Out):
     agreement_with_hand: Rate
     """k/n where an invalid reply counts as a disagreement."""
     unanimous_and_wrong: bool
+    """Every reply gave the same label and it disagrees with the hand label."""
+    all_invalid: bool
+    """Every reply was INVALID: a format or outage case, not a wrong label."""
     distinct_evidence_path_sets: int
     """Distinct sets of ``(resume_path, posting_path)`` pairs among valid replies."""
     format_acceptance: Rate
@@ -196,6 +202,7 @@ def spread_table(
         top = max(counts.values())
         modal = sorted(o for o, c in counts.items() if c == top)
         unanimous = len(counts) == 1
+        all_invalid = set(counts) == {INVALID}
         agree = sum(1 for o in outcomes if o == hand[pid].value)
         path_sets = {
             frozenset((p[0], p[1]) for p in c.evidence_paths)
@@ -213,7 +220,8 @@ def spread_table(
                 modal_outcome="/".join(modal),
                 unanimous=unanimous,
                 agreement_with_hand=rate(agree, len(mine)),
-                unanimous_and_wrong=unanimous and agree == 0,
+                unanimous_and_wrong=unanimous and agree == 0 and not all_invalid,
+                all_invalid=all_invalid,
                 distinct_evidence_path_sets=len(path_sets),
                 format_acceptance=rate(
                     sum(1 for c in mine if c.first_reply_valid), len(mine)
@@ -245,6 +253,9 @@ def load_hand_labels(ctx: ExperimentContext) -> tuple[dict[str, VerdictLabel], A
 def cmd_sampling_table(ctx: ExperimentContext) -> dict[str, Any]:
     """Writes ``spread.json`` and ``SAMPLING.tables.md`` from the manifest.
 
+    An incomplete manifest (the run stopped early) is reported, marked
+    ``"complete": false`` with the planned and made call counts.
+
     Args:
         ctx: Shared dependencies.
 
@@ -268,6 +279,8 @@ def cmd_sampling_table(ctx: ExperimentContext) -> dict[str, Any]:
         "model_requested": manifest["model_requested"],
         "models_served": sorted({m for c in calls for m in c.model_served}),
         "n_per_posting": manifest["n_per_posting"],
+        "complete": is_complete(manifest),
+        "calls_planned": manifest["n_per_posting"] * len(manifest["posting_ids"]),
         "calls_total": len(calls),
         "calls_without_session_id": no_session,
         "session_ids_distinct": True,
@@ -289,9 +302,20 @@ def render_tables(doc: Mapping[str, Any]) -> str:
         Markdown; the conclusion is left to the student.
     """
     confirmed = doc["hand_labels_confirmed_by_student"]
+    incomplete = (
+        []
+        if doc["complete"]
+        else [
+            f"**INCOMPLETE STUDY:** the run stopped after {doc['calls_total']} of "
+            f"{doc['calls_planned']} planned calls; these tables describe only the "
+            "calls made.",
+            "",
+        ]
+    )
     lines = [
         "# Sampling report: generated tables",
         "",
+        *incomplete,
         "**Repeatable is not correct.** A label Claude gives every time can still "
         "disagree with the hand label; such rows are marked *unanimous and wrong*.",
         "",
@@ -315,6 +339,7 @@ def render_tables(doc: Mapping[str, Any]) -> str:
         "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     wrong: list[str] = []
+    all_invalid: list[str] = []
     for row in doc["rows"]:
         agreement = row["agreement_with_hand"]
         accepted = row["format_acceptance"]
@@ -322,6 +347,9 @@ def render_tables(doc: Mapping[str, Any]) -> str:
         if row["unanimous_and_wrong"]:
             unanimous = "yes (unanimous and wrong)"
             wrong.append(row["posting_id"])
+        if row["all_invalid"]:
+            unanimous = "yes (all INVALID: format or outage)"
+            all_invalid.append(row["posting_id"])
         lines.append(
             f"| {row['posting_id']} | {row['hand_label']} | {row['n']} | "
             f"{row['relevant']} | {row['not_relevant']} | {row['invalid']} | "
@@ -333,6 +361,10 @@ def render_tables(doc: Mapping[str, Any]) -> str:
     lines += [
         "",
         "Unanimous and wrong: " + (", ".join(wrong) if wrong else "none") + ".",
+        "",
+        "All replies INVALID (a format or outage case, not a wrong label): "
+        + (", ".join(all_invalid) if all_invalid else "none")
+        + ".",
         "",
         "## Conclusion",
         "",

@@ -335,6 +335,47 @@ def test_score_end_to_end(tmp_path: Path) -> None:
     ).read_text()
     assert "<!-- STUDENT WRITES THIS -->" in tables
     assert "accuracy" not in tables.replace("not accuracy", "")
+    assert doc["complete"] is True and "INCOMPLETE" not in tables
+
+
+def test_score_accepts_a_crashed_cell_and_marks_it_incomplete(
+    tmp_path: Path,
+) -> None:
+    repo, board = _frozen(tmp_path)
+    _run(repo, board, "v2", "dev")
+    _run(repo, board, "v1", "heldout")
+    judge, _ = first_reply_judge(repo, [reply_text()] * 4)
+    made: list[str] = []
+
+    def crashing(posting: Any, prompt: Any, log_dir: str) -> Any:
+        if len(made) == 4:
+            raise RuntimeError("simulated crash mid-cell")
+        made.append(log_dir)
+        return judge(posting, prompt, log_dir)
+
+    kwargs: dict[str, Any] = {
+        "prompt_version": "v2",
+        "set_name": "heldout",
+        "postings": board.by_id(),
+        "load_prompt": repo.load_prompt,
+        "judge_call": crashing,
+    }
+    with pytest.raises(RuntimeError, match="simulated crash"):
+        pe.cmd_run(repo.ctx, **kwargs)
+    results = repo.data("experiments/prompt/results/v2-heldout/results.json")
+    assert results["complete"] is False and len(results["calls"]) == 4
+    with pytest.raises(ExperimentError, match="already run"):
+        pe.cmd_run(repo.ctx, **kwargs)  # the run-once rule still holds
+    doc = pe.cmd_score(repo.ctx)
+    assert doc["complete"] is False
+    assert doc["cells"]["v2-heldout"]["complete"] is False
+    assert doc["cells"]["v2-heldout"]["format_acceptance"]["n"] == 4
+    assert doc["cells"]["v1-dev"]["complete"] is True
+    tables = (
+        repo.root / "data/experiments/prompt/PROMPT_EXPERIMENT.tables.md"
+    ).read_text()
+    assert "**INCOMPLETE STUDY:**" in tables and "v2-heldout." in tables
+    assert "| v2-heldout (INCOMPLETE) |" in tables
 
 
 def test_rule_vs_hand_audit_reported_after_seal(tmp_path: Path) -> None:

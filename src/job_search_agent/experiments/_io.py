@@ -11,7 +11,7 @@ Inputs and earlier outputs are read through ``RepoReader`` with repo-relative pa
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, ClassVar, Protocol
@@ -160,6 +160,49 @@ def file_sha256(reader: RepoReader, rel: str) -> str:
         return sha256_hex(reader.read_bytes(rel))
     except FileNotFoundError as exc:
         raise ExperimentError(f"missing file: {rel}") from exc
+
+
+def record_calls(
+    ctx: ExperimentContext,
+    rel: str,
+    header: Mapping[str, Any],
+    calls: Iterable[Callable[[], Mapping[str, Any]]],
+) -> dict[str, Any]:
+    """Makes the calls in order, rewriting ``rel`` atomically after each one.
+
+    The file exists with ``"complete": false`` before the first call, so a started
+    study is never re-run, and a crash keeps every call made so far. Only after the
+    last call are ``"complete": true`` and ``finished_at_utc`` written.
+
+    Args:
+        ctx: Shared dependencies.
+        rel: Data-relative output file (a manifest or a results file).
+        header: Study facts copied to the top of the file.
+        calls: Each makes one call and returns its JSON record.
+
+    Returns:
+        The final document.
+    """
+    done: list[Mapping[str, Any]] = []
+    doc: dict[str, Any] = {
+        **header,
+        "retry": "none (first reply only)",
+        "complete": False,
+        "calls": done,
+    }
+    ctx.writer.write_json_atomic(rel, doc)
+    for call in calls:
+        done.append(call())
+        ctx.writer.write_json_atomic(rel, doc)
+    doc["finished_at_utc"] = ctx.clock.now_utc().isoformat()
+    doc["complete"] = True
+    ctx.writer.write_json_atomic(rel, doc)
+    return doc
+
+
+def is_complete(doc: Mapping[str, Any]) -> bool:
+    """Returns True only for a study file that says ``"complete": true``."""
+    return doc.get("complete") is True
 
 
 STUDENT_MARKER = "<!-- STUDENT WRITES THIS -->"

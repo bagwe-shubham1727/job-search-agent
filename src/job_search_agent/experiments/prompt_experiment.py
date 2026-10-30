@@ -7,7 +7,8 @@ Command order, each step checked against git through ``GitInspector``:
 3. ``seal`` — validates all labels and writes ``SEAL.json``. The student commits the
    labels and SEAL before any model call.
 4. ``run --prompt v1 --set dev`` — refuses unless SEAL is committed and its hashes
-   match. Each (prompt, set) cell runs once only.
+   match. Each (prompt, set) cell runs once only; its ``results.json`` is rewritten
+   after every call with ``"complete": false`` (``true`` only at the end).
 5. The student writes ``prompts/judge.v2.md`` (one section changed).
 6. ``freeze`` — needs the v1 dev results and a one-section diff; writes
    ``FREEZE.json``, which must be committed.
@@ -15,7 +16,8 @@ Command order, each step checked against git through ``GitInspector``:
 8. ``run --prompt v1|v2 --set heldout`` — refuses unless FREEZE is committed, the
    prompt hashes equal FREEZE, both dev cells exist, and this cell has not run.
 9. ``score`` — re-verifies SEAL, reveals the strata, writes ``metrics.json`` and the
-   tables.
+   tables. A cell that stopped early is scored on the calls it made and marked
+   incomplete.
 
 Outputs live under ``data/experiments/prompt/`` (data-relative
 ``experiments/prompt/``); the human-authored inputs live under ``experiments/prompt/``.
@@ -33,7 +35,9 @@ from job_search_agent.experiments._io import (
     ExperimentContext,
     ExperimentError,
     file_sha256,
+    is_complete,
     read_json,
+    record_calls,
 )
 from job_search_agent.experiments.metrics import (
     CallScore,
@@ -88,10 +92,6 @@ def labels_rel(set_name: str) -> str:
 def cell_dir(prompt: str, set_name: str) -> str:
     """Data-relative directory of one (prompt, set) cell."""
     return f"{OUT}/results/{prompt}-{set_name}"
-
-
-def _started(prompt: str, set_name: str) -> str:
-    return f"{cell_dir(prompt, set_name)}/STARTED.json"
 
 
 def _results(prompt: str, set_name: str) -> str:
@@ -319,7 +319,7 @@ def cmd_run(
     if prompt_version not in PROMPTS or set_name not in SETS:
         raise ExperimentError("prompt must be v1 or v2 and set must be dev or heldout")
     _verify_seal(ctx)
-    if ctx.data_exists(_started(prompt_version, set_name)):
+    if ctx.data_exists(_results(prompt_version, set_name)):
         raise ExperimentError(
             f"{prompt_version}/{set_name} has already run; each cell runs once only"
         )
@@ -345,19 +345,16 @@ def cmd_run(
         "code_commit": ctx.git.head(),
         "code_dirty": ctx.git.is_dirty(),
     }
-    ctx.writer.write_json_atomic(_started(prompt_version, set_name), started)
-    records: list[CallRecord] = []
-    for pid in ids:
+
+    def call(pid: str) -> Callable[[], dict[str, Any]]:
         log_dir = f"{cell_dir(prompt_version, set_name)}/calls/{pid}"
-        records.append(judge_call(postings[pid], prompt, log_dir))
-    doc = {
-        **started,
-        "finished_at_utc": _now(ctx),
-        "retry": "none (first reply only)",
-        "calls": [r.model_dump(mode="json") for r in records],
-    }
-    ctx.writer.write_json_atomic(_results(prompt_version, set_name), doc)
-    return doc
+        return lambda: judge_call(postings[pid], prompt, log_dir).model_dump(
+            mode="json"
+        )
+
+    return record_calls(
+        ctx, _results(prompt_version, set_name), started, (call(p) for p in ids)
+    )
 
 
 # --- freeze ----------------------------------------------------------------------
@@ -414,13 +411,19 @@ def cmd_freeze(ctx: ExperimentContext, *, load_prompt: LoadPrompt) -> dict[str, 
 # --- score -----------------------------------------------------------------------
 
 
-def _scores(ctx: ExperimentContext, prompt: str, set_name: str) -> list[CallScore]:
+def _scores(
+    ctx: ExperimentContext, prompt: str, set_name: str
+) -> tuple[list[CallScore], bool]:
     doc = ctx.read_data_json(_results(prompt, set_name))
-    return [CallRecord.model_validate(c).score() for c in doc["calls"]]
+    scores = [CallRecord.model_validate(c).score() for c in doc["calls"]]
+    return scores, is_complete(doc)
 
 
 def cmd_score(ctx: ExperimentContext) -> dict[str, Any]:
     """Scores all four cells after re-verifying the seal; reveals the strata.
+
+    A cell that stopped early is scored on the calls it made and marked
+    ``"complete": false`` (as is the whole document).
 
     Args:
         ctx: Shared dependencies.
@@ -452,11 +455,13 @@ def cmd_score(ctx: ExperimentContext) -> dict[str, Any]:
     audit: dict[str, Any] = {}
     for set_name in SETS:
         hand = labels[set_name].by_id()
-        per_prompt = {p: _scores(ctx, p, set_name) for p in PROMPTS}
-        for prompt, scores in per_prompt.items():
-            cells[f"{prompt}-{set_name}"] = score_cell(scores, hand).model_dump(
-                mode="json"
-            )
+        loaded = {p: _scores(ctx, p, set_name) for p in PROMPTS}
+        per_prompt = {p: scores for p, (scores, _) in loaded.items()}
+        for prompt, (scores, complete) in loaded.items():
+            cells[f"{prompt}-{set_name}"] = {
+                **score_cell(scores, hand).model_dump(mode="json"),
+                "complete": complete,
+            }
         discord[set_name] = [
             d.model_dump(mode="json")
             for d in discordant(per_prompt["v1"], per_prompt["v2"], strata, hand)
@@ -469,6 +474,7 @@ def cmd_score(ctx: ExperimentContext) -> dict[str, Any]:
         "code_commit": ctx.git.head(),
         "changed_section": freeze["changed_section"],
         "first_reply_only": True,
+        "complete": all(cell["complete"] for cell in cells.values()),
         "cells": cells,
         "v1_v2_discordant": discord,
         "rule_vs_hand_audit": audit,
@@ -495,9 +501,20 @@ def render_tables(doc: Mapping[str, Any]) -> str:
     Returns:
         Markdown with generated tables and student-only sections left blank.
     """
+    stopped = [name for name, cell in doc["cells"].items() if not cell["complete"]]
+    incomplete = (
+        [
+            "**INCOMPLETE STUDY:** these cells stopped before every call was made "
+            "and are scored on the calls made only: " + ", ".join(stopped) + ".",
+            "",
+        ]
+        if stopped
+        else []
+    )
     lines = [
         "# Prompt experiment: generated tables",
         "",
+        *incomplete,
         f"Changed section (v1 to v2): `{doc['changed_section']}`. First reply only; "
         "no retries. Format acceptance is the validator pass rate, not accuracy. "
         "Brackets are Wilson 95% intervals.",
@@ -508,8 +525,9 @@ def render_tables(doc: Mapping[str, Any]) -> str:
     ]
     for name, cell in doc["cells"].items():
         paths = cell["evidence_paths"]
+        mark = "" if cell["complete"] else " (INCOMPLETE)"
         lines.append(
-            f"| {name} | {_fmt_rate(cell['format_acceptance'])} | "
+            f"| {name}{mark} | {_fmt_rate(cell['format_acceptance'])} | "
             f"{_fmt_rate(cell['agreement_invalid_as_disagreement'])} | "
             f"{_fmt_rate(cell['agreement_among_valid'])} | "
             f"{paths['valid_entries']}/{paths['entries']} | "
