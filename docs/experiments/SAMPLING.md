@@ -2,7 +2,7 @@
 
 **Question.** If the same prompt contract (`prompts/judge.v1.md`) is asked about the same posting in fresh conversations, how much do Claude's verdicts vary, and do they agree with my hand labels?
 
-**Prediction.** Written and committed before any call: [`experiments/sampling/PREDICTION.md`](../../experiments/sampling/PREDICTION.md) (commit `f5fb431`, 2026-10-30 23:37 ET).
+**Prediction.** Written and committed before any call: [`experiments/sampling/PREDICTION.md`](../../experiments/sampling/PREDICTION.md) (commit `f5fb431`, 2026-10-30 23:37 ET). **Qualification:** Claude's tier-0 reasoning about `8249901` had already appeared in Chapter 3 transcripts before this prediction commit, so the prediction was pre-sampling-call but not fully insulated from prior exposure to Claude's reasoning.
 
 **Hand labels.** The five `CONTRACT.md` §13 verdicts in [`experiments/sampling/hand_labels.json`](../../experiments/sampling/hand_labels.json), confirmed by me before the run.
 
@@ -32,6 +32,8 @@ Hand labels are the CONTRACT.md §13 verdicts; confirmed by the student: Shubham
 | 8234357 | NO_MATCH | 4 | 1 | 3 | 0 | NO_MATCH | no | 3/4 | 4 | 4/4 |
 
 Unanimous and wrong: 8249901.
+
+**Chronology limitation for the pre-run prediction.** Claude's tier-0 infrastructure reasoning about posting `8249901` had already appeared in the Chapter 3 transcripts before I made and committed my Chapter 1 prediction (`f5fb431`). Therefore, although the prediction file was committed before the Chapter 1 sampling calls, that particular reasoning was not wholly independent of prior exposure to Claude's analysis. This limits any claim that the prediction was an entirely unaided, pre-exposure forecast.
 
 All replies INVALID (a format or outage case, not a wrong label): none.
 
