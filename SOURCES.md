@@ -17,7 +17,11 @@ No code was copied from other projects.
 
 ## What I wrote
 
-<!-- STUDENT WRITES THIS -->
+- **`CONTRACT.md` (commits `053fda0`, `c1bd530`, `7aa5d0f`):** I chose the target role families, level targets, skill categories, the switch to Stripe on Greenhouse, and the hard US-only location rule after inspecting the initial hand-check candidates (including evaluating `8249901`, `7543868`, `8175099`, and `8234357`), and edited the contract text across drafts with Claude's review feedback.
+- **Chapter 1 (`experiments/sampling/hand_labels.json`, `data/experiments/sampling/SAMPLING.tables.md`, `docs/experiments/SAMPLING.md`):** I confirmed the 5 `CONTRACT.md §13` hand labels (`f5fb431`), provided the pre-run prediction before `jsa exp sampling run` executed, and provided the `## Conclusion` section (updated after Claude Code verified the 20-call reasons on `8234357` and `8127182`).
+- **Chapter 2 (`experiments/prompt/labels/{dev,heldout}.labels.json`, `prompts/CHANGELOG.md`, `prompts/judge.v2.md`, `data/experiments/prompt/PROMPT_EXPERIMENT.tables.md`, `docs/experiments/PROMPT_EXPERIMENT.md`):** I sealed the 20 `dev` and `heldout` hand labels (`14e51f9`), chose Candidate 1 (`label_definition` replacement) after seeing the `7/10` `v1` `dev` run (`c2e5599`), directed Claude Code to use the `CONTRACT.md §6` lists in `judge.v2.md` to avoid held-out leakage, and provided the `## Rule-vs-hand decisions` and `## Conclusion` sections (`6f5dc0a`).
+- **Chapter 3 (`data/experiments/surfaces/ACTION_SURFACES.tables.md`, `docs/experiments/ACTION_SURFACES.md`):** I provided the three `What could go wrong` risk cells and the `## Least autonomy that suffices` defense selecting Surface `(a)` (`--tools ""`).
+- **FRICTIONAL.md, README.md sign-off and driver's-seat table, and SOURCES.md student sections:** Written and reviewed for final sign-off using docs/BUILD_LOG.md and docs/FACTS_FOR_SIGNOFF.md to trace the exact timestamps, commit hashes, and run counts.
 
 ## What Claude contributed
 
@@ -37,8 +41,6 @@ Claude (Claude Code, Opus 5.5 orchestrating; coding agents in separate worktrees
 
 ## AI assistance in my own parts
 
-<!-- STUDENT WRITES THIS -->
-<!-- Reminder of disclosures you asked to include:
-     - AI assistance formatting the 20 prompt-experiment hand-label JSON entries and notes from the rule criteria.
-     - Any AI help drafting the sampling prediction and conclusion, the prompt-experiment conclusion,
-       the action-surface defence, or FRICTIONAL.md. -->
+- **Contract review and §6.4 / §13 data extraction (`CONTRACT.md`, Oct 29):** As recorded in `docs/BUILD_LOG.md` (`18:10–19:15 ET`), Claude reviewed my contract drafts, turned my US-only location rule into finite US and non-US signal lists across the 294 distinct `location.name` strings in the October 29 Stripe response (`§6.4`), computed the complete skill path lists for the §13 hand-check postings, and found `8127182` as the `<2`-skills hand-check case.
+- **Chapter 2 hand-label JSON formatting and pre-freeze check (`dev.labels.json`, `heldout.labels.json`, `judge.v2.md`):** I used AI assistance to format the 20 `dev` and `heldout` hand-label JSON entries and notes (`14e51f9`) from the `CONTRACT.md §6` rule criteria (which is why the `20/20` rule-vs-hand audit reflects consistency with the rule). Before freezing `judge.v2.md` (`c2e5599`), Claude checked the `v2` text against `CONTRACT.md §6`, flagged that several examples came from held-out postings, and replaced those examples with the full contract lists at my direction so the held-out set stayed clean.
+- **Reference logs and fact-checking against repo artifacts (`BUILD_LOG.md`, `FACTS_FOR_SIGNOFF.md`, Chapters 1–3, `README.md`, `FRICTIONAL.md`):** Claude maintained the dated factual timeline in `docs/BUILD_LOG.md` and candidate sign-off items in `docs/FACTS_FOR_SIGNOFF.md`, and verified the cited counts, costs, commit hashes, and run reasons in my sections against the committed repository files before each commit (for example, checking the `3/1` split reason on `8234357` in Chapter 1 and the test/run counts in `README.md` and `FRICTIONAL.md`).

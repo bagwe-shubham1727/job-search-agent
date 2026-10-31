@@ -96,28 +96,31 @@ Left out on purpose: caches, `.venv`, credentials, `data/tmp/`, `data/scratch/`,
 
 Candidate facts for "Not checked" and "Not claiming": [`docs/FACTS_FOR_SIGNOFF.md`](docs/FACTS_FOR_SIGNOFF.md).
 
-<!-- STUDENT WRITES THIS -->
-
-```text
-Sign-off — Job-Search Agent 1
-Checked:      which properties, by which of my own tests (name them)
-How:          by hand / by a test I wrote before reading Claude's code /
-              by recomputation / with Claude's help (say which parts)
-Not checked:  at least three real items
-Not claiming: what this agent does not show
-Signed or withheld: ____________ (name, date)
-```
+- **Checked:**
+  - All five `CONTRACT.md §13` hand-check postings (`8249901`, `7543868`, `8175099`, `8127182`, `8234357`) reproduce their exact verdicts, failed gates, and skill evidence paths against `evidence/handcheck/stripe-jobs-2026-10-29T22-41-31Z.json`.
+  - Contract test suite kills both wrong implementations required by `CONTRACT.md §14` (`wrong_versions/title_only.py` caught by 9 tests; `wrong_versions/substring_count.py` caught by 12 tests), and the full test gate (`973 passed`), `ruff`, and `mypy --strict` pass.
+  - Three live runs on three different calendar days, October 29–31, 2026 ET (`2026-10-30T01-52-15Z` baseline with 736 IDs, `2026-10-31T03-03-36Z` day-2 run with 746 fetched / 21 new IDs, and `2026-10-31T19-22-29Z` day-3 run with 745 fetched / 0 new IDs, commit `9b45b54`), one seeded replay pair (`data/seeded/runs/`), and all three experiment harnesses (Chapters 1–3) completed with verified raw SHA-256 digests (`uv run jsa verify-evidence`) and zero privacy leaks in run outputs (`uv run jsa audit-privacy`).
+- **How:**
+  - Ran `uv run pytest -q`, `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy --strict src tests`, `uv run jsa verify-evidence`, and `uv run jsa audit-privacy data/`, and inspected the generated `report.json`, `spread.json`, `metrics.json`, and `facts.json` files against `CONTRACT.md`.
+- **Not checked:**
+  - **Sentence-initial `React` and `React Native` false positives (`CONTRACT.md §6.2`):** Because the `React` rule checks capitalization without grammar parsing, sentence-initial plain-English `"React"` or `"React Native"` counts as the `React` frontend skill; false-positive frequency across live boards was not measured beyond the October 29 snapshot.
+  - **Senior roles without a title marker (`CONTRACT.md §2`, `§6.1`):** Stripe postings titled simply `Software Engineer` or `Full Stack Engineer` that demand `5+` or `8+` years of experience in `$.content` pass the deterministic title gate (as seen in `8197135`, `8197891`, `8198280`, `8206731`, and `8039548`).
+  - **Explicit exclusion phrases (§6.3) and description rescue phrases (§6.4) on live Stripe data:** Zero postings on the October 29, 2026 Stripe board contained any of the 11 §6.3 exclusion phrases or 12 §6.4 location-rescue phrases, and `REST` never matched because the board wrote plural `"RESTful APIs"` (`docs/PLAN.md` data facts), so those branches were tested only on constructed fixtures.
+  - **Outbound network destinations inside the external `claude` CLI binary (`CONTRACT.md §11`):** Python's `AllowListTransport` enforces `boards-api.greenhouse.io` for the agent's own HTTP requests, but cannot inspect or restrict the hosts contacted internally by the separate `claude` subprocess.
+  - **Generalization beyond one board, one model, and three days:** All live and experimental data comes from a single Greenhouse board (`stripe`) between October 29 and October 31, 2026 using `claude-sonnet-5-5`.
+- **Not claiming:**
+  - I am not claiming that a `MATCH` or `RELEVANT` label means Kiran Joshi (or any candidate) is qualified for the job, will pass recruiting screens, or has verified visa sponsorship, nor that the 10-posting cells in Chapter 2 (`10/10 [0.72, 1.00]`) prove a statistically narrow error rate or generalize to unstratified board traffic.
+- **Signed:** Shubham Bagwe — 2026-10-31
 
 ## Driver's seat
 
-<!-- STUDENT WRITES THIS -->
-<!-- Columns: Task | What Claude did | What I did | Why that part stays mine | Pointer (transcript line or edit).
-     Candidate pointers that are already on record:
-     - 053fda0: CONTRACT.md committed first, my text (BUILD_LOG 2026-10-29 17:40: Claude declined to ghostwrite it).
-     - f5fb431: my sampling prediction, committed before any sampling call.
-     - 14e51f9: my 20 hand labels sealed before any model call.
-     - c2e5599: my v2 choice and rationale in prompts/CHANGELOG.md, before any v2 call.
-     - BUILD_LOG 2026-10-30 02:35: Claude waited for my prediction rather than running first. -->
+| Point in the build | What was decided or changed | Evidence in the repo |
+|---|---|---|
+| Contract & board selection (Oct 29) | Rejected the initial `datadog` suggestion after 0/397 postings passed my title filter; switched to `stripe`, added the hard US-only location rule (§6.4) after Bengaluru posting `7543868` passed title and skills, and committed the contract and removal of the dangling §19 reference. | Commits `053fda0`, `c1bd530`, `7aa5d0f`; `docs/BUILD_LOG.md` (`~18:05 ET`, `18:10–19:19 ET`) |
+| Chapter 1 sampling gate & confirmation (Oct 30) | Held the sampling run at the pre-run gate (`BUILD_LOG.md 02:35`), wrote my pre-run prediction, confirmed the 5 §13 hand labels in `experiments/sampling/hand_labels.json`, and after the 20-call run (`7545af9`) revised the conclusion so `8234357`'s `3/1` split was attributed to `"2–5+ years of experience"` (with `"N/A"` location placed in `uncertainties` on all 4 calls). | Commits `f5fb431`, `7545af9`; `docs/BUILD_LOG.md` (`02:35 ET`); `docs/experiments/SAMPLING.md` |
+| Chapter 2 hand-label seal (Oct 31) | Submitted and sealed the 20 rule-based hand labels across `dev` and `heldout` (`experiments/prompt/labels/{dev,heldout}.labels.json` and `data/experiments/prompt/SEAL.json`) before running the first `v1` `dev` model call (`f1717e2`). | Commits `14e51f9`, `f1717e2`; `data/experiments/prompt/SEAL.json` |
+| Chapter 2 `v2` choice & clean held-out freeze (Oct 31) | After `v1` scored `7/10` on `dev` by rejecting 3 `MATCH` postings on experience years, chose Candidate 1 (replacing only `label_definition`), accepted the pre-freeze check replacing held-out-derived examples with the full `CONTRACT.md §6` lists so `heldout` stayed clean, froze `FREEZE.json`, and wrote the post-score conclusion weighing the two-judge tradeoff. | Commits `c2e5599`, `ed2c64c`, `6f5dc0a`; `prompts/CHANGELOG.md`; `docs/experiments/PROMPT_EXPERIMENT.md` |
+| Chapter 3 surface choice & defense (Oct 31) | Chose Surface `(a)` (`--tools ""`, payloads on stdin) over `(b)` and `(c)` and defended it using `(c)`'s 5 chunked `WebFetch` calls (`$0.1311`), lossy summarizing-model truncation, and "by eye" ID comparison. | `data/experiments/surfaces/ACTION_SURFACES.tables.md`; `docs/experiments/ACTION_SURFACES.md` |
 
 | Task | What Claude did | What I did | Why that part stays mine | Pointer |
 |---|---|---|---|---|
