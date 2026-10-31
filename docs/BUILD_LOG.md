@@ -198,3 +198,11 @@ design.
 **03:15 Docs agent blocked.** Spawning a documentation agent (README, NETWORK, TRACEABILITY, experiment docs, a
 SOURCES.md draft, FRICTIONAL.md headings) was denied by Claude Code's auto-mode classifier ("Auto-Mode Bypass").
 Claude did not work around it and asked the student how to proceed.
+
+**23:03 Run 2, live day 2**: `uv run jsa run --model-backend claude-cli` at clean commit `8a58a27`, a second
+calendar day after the Run 1 baseline.
+- Status SUCCESS_WITH_NEW: 746 fetched, 746 unique valid IDs, new 21, retried 0, pending 0, state saved.
+- Rule: NO_MATCH on all 21 (mostly sales, legal and PM roles, plus four ML internships). Claude opinion: VALID
+  NOT_RELEVANT on all 21. The judges never disagreed, and there is no MATCH case in this run.
+- Raw sha256 `530ff442…`. `verify-evidence` OK. `audit-privacy`: 0 findings in this run (the 62 total are the known
+  surface (a)/(b) payloads).
