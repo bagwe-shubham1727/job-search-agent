@@ -86,7 +86,11 @@ def test_no_real_resume_tracked() -> None:
         for p, name in names.items()
         if "resume" in name and PurePosixPath(name).suffix in {".json", ".pdf", ".docx"}
     ]
-    assert resume_like == [RESUME_FIXTURE_REL]
+    # Surface (b) sandbox: the fictional persona's judge payload, no contact block.
+    payload = "data/experiments/surfaces/b/sandbox/resume.payload.json"
+    assert sorted(resume_like) == sorted([RESUME_FIXTURE_REL, payload])
+    assert "personal" not in json.loads((REPO_ROOT / payload).read_bytes())
+    resume_like.remove(payload)
     for path in resume_like:
         assert path.endswith(".resume.example.json")
         doc = json.loads((REPO_ROOT / path).read_bytes())
