@@ -42,6 +42,10 @@ Rejected before the run: `--json-schema` (an interface change, not a prompt chan
 and model or temperature changes (there is no such flag, and neither is a prompt
 change).
 
+## judge.v2 (2026-10-31)
+
+- v1 with only `label_definition` replaced by the CONTRACT.md §6.5 four-gate rule (candidate 1).
+
 ## Choice of the v2 change
 
 **The student chooses** which candidate becomes v2, after seeing the v1 dev results
@@ -50,4 +54,10 @@ the student. `judge.v2.md` does not exist until then.
 
 ### Which candidate and why
 
-<!-- STUDENT WRITES THIS -->
+Chosen on 2026-10-31 after inspecting the `v1` `dev` results and before any `v2` call: **Candidate 1 (replace only `label_definition` with the `CONTRACT.md §6.5` four-gate rule).**
+
+On `dev`, `v1` agreed with my labels on 7/10 postings (`10/10` format acceptance). All 3 misses were `MATCH` postings that `v1` rejected as `NOT_RELEVANT` because of years-of-experience requirements in the description body: `8197135` ("5 years post-bachelor's, senior-level"), `8197891` ("Bachelor's + 5 years"), and `8198280` ("Master's + 6 years"). Only `8128744` (`Software Engineer, New Grad`) was labeled `RELEVANT`. Even on `8265763` (`NO_MATCH`), where `v1` agreed with my label, it rejected on "2–5 years" rather than the two gates my rule actually fails it on (only 1 matched skill `Java` and location `"na"`).
+
+Candidate 3 (adding a worked output example) would not help because first-reply format acceptance is already `10/10`. Candidate 2 (adding only the US-based location sentence) would not fix any of the 3 `dev` misses because all 3 are in `Seattle, WA` and failed on experience years, not location. Candidate 1 is the only pre-registered change that aligns `RELEVANT` with the contract's four deterministic gates (title family and excluded markers, at least 2 distinct eligible skills excluding `familiar_with_not_shipped`, no §6.3 exclusion phrases, and `US_BASED` location) without adding an unstated years-of-experience gate.
+
+Wording note (2026-10-31, before freeze): my first draft of the new `label_definition` used examples taken from held-out postings (a held-out title, held-out locations, a held-out language requirement and an HTML5 note from a held-out label). To keep the held-out set clean, every list and example in `judge.v2.md` is copied from `CONTRACT.md §6` instead (full non-US lists, all 12 rescue phrases, the contract's own title counter-examples). Claude made that substitution at my direction.
