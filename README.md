@@ -59,10 +59,12 @@ All runs below are real and committed. Full tables: [`docs/RUNS.md`](docs/RUNS.m
 |---|---|---|---|---|
 | Live 1, baseline | 2026-10-29 21:52 | `BASELINE` | 736 | 0 |
 | Live 2, second calendar day | 2026-10-30 23:03 | `SUCCESS_WITH_NEW` | 746 | 21 |
+| Live 3, third calendar day | 2026-10-31 15:22 | `SUCCESS_NO_NEW` | 745 | 0 |
 | Seeded 1 (replay of the 18:41 hand-check response) | 2026-10-29 22:21 | `BASELINE` | 734 | 0 |
 | Seeded 2 (replay of live 1) | 2026-10-29 22:21 | `SUCCESS_WITH_NEW` | 736 | 3 |
 
 - **Live 2:** both judges ran on all 21 new postings. The rule gave `NO_MATCH` on all 21. Claude's 21 replies were all valid and all `NOT_RELEVANT`.
+- **Live 3:** no posting was new. The board had shrunk to 745, and the 757 IDs seen so far are kept: a disappeared ID is never forgotten (CONTRACT §10).
 - **Evidence:** raw responses are saved byte for byte with their SHA-256 (`data/live/runs/*/raw/`); state is in `data/live/state.json`. `verify-evidence` passes on every file.
 
 ## The three chapter artifacts

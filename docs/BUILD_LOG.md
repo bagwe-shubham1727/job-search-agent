@@ -206,3 +206,10 @@ calendar day after the Run 1 baseline.
   NOT_RELEVANT on all 21. The judges never disagreed, and there is no MATCH case in this run.
 - Raw sha256 `530ff442…`. `verify-evidence` OK. `audit-privacy`: 0 findings in this run (the 62 total are the known
   surface (a)/(b) payloads).
+
+## 2026-10-31
+
+**15:22 Run 3, live day 3** (student's request): `uv run jsa run --model-backend claude-cli` at clean commit `a06911d`.
+- Status SUCCESS_NO_NEW: 745 fetched, 745 unique valid IDs, new 0, state saved. No model calls (nothing new).
+- The board shrank from 746 to 745; the cumulative seen set is 757 IDs.
+- Raw sha256 `b8615ebd…`. `verify-evidence` OK; `audit-privacy` 0 findings in this run.

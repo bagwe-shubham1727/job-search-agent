@@ -13,7 +13,7 @@ Candidate items for the README sign-off. Each is a fact about what was or was no
 - New location spellings not in the §6.4 lists are `NOT_ESTABLISHED` until the contract is amended.
 
 ## Scope of the evidence
-- One board (Stripe on Greenhouse), two live runs on two calendar days (Oct 29 baseline, Oct 30 with 21 new), plus one seeded pair.
+- One board (Stripe on Greenhouse), three live runs on three calendar days (Oct 29 baseline, Oct 30 with 21 new, Oct 31 with none new), plus one seeded pair.
 - None of the 21 new postings in the day-2 run was a MATCH, so the live pipeline never had a MATCH case to judge.
 - Sampling: 5 hand-picked postings × 4 calls. Prompt experiment: 10 postings per cell, one call each.
 - The 20 prompt-experiment hand labels were made by applying the CONTRACT §6 rule, with AI help formatting the entries. They measure agreement with the rule, not independent human judgment.
