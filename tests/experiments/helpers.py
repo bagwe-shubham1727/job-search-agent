@@ -90,9 +90,13 @@ def make_repo(tmp_path: Path) -> Repo:
     (root / "experiments/prompt").mkdir(parents=True)
     shutil.copy(procedure, root / "experiments/prompt/PROCEDURE.md")
     (root / "experiments/sampling").mkdir(parents=True)
-    shutil.copy(
-        REPO_ROOT / "experiments/sampling/hand_labels.json",
-        root / "experiments/sampling/hand_labels.json",
+    # The fixture stays unconfirmed so the "not yet confirmed" path keeps its tests.
+    labels = json.loads(
+        (REPO_ROOT / "experiments/sampling/hand_labels.json").read_text("utf-8")
+    )
+    labels["confirmed_by_student"] = None
+    (root / "experiments/sampling/hand_labels.json").write_text(
+        json.dumps(labels, indent=2), "utf-8"
     )
     git = FakeGit(head_commit="a" * 40)
     writer = MemoryWriter(root / "data")

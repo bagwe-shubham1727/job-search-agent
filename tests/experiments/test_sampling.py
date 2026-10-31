@@ -244,7 +244,7 @@ def test_hand_labels_scaffold_matches_contract_section_13() -> None:
         (REPO_ROOT / "experiments/sampling/hand_labels.json").read_text("utf-8")
     )
     assert doc["source"] == "CONTRACT.md §13"
-    assert doc["confirmed_by_student"] is None
+    assert isinstance(doc["confirmed_by_student"], str)
     labels = {pid: v["hand_label"] for pid, v in doc["labels"].items()}
     assert labels == {
         "8249901": "MATCH",
