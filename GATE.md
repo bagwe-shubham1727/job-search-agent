@@ -51,7 +51,7 @@ Per loop run, from `config/watch.toml`:
 | Budget | Value | Checked |
 |---|---:|---|
 | `max_boards` (boards attempted) | 6 | Before starting each board |
-| `max_requests` (HTTP requests sent, each attempt and each redirect hop counts) | 10 | Before every request |
+| `max_requests` (GET attempts sent; see amendment A1) | 10 | Before every attempt |
 | `max_seconds` (wall time from loop start) | 180 | Before each board and each retry; each request's timeout is the smaller of 30 s and the time left |
 
 A request already in flight is bounded by its own timeout, so the loop can overrun
@@ -180,5 +180,11 @@ raw bytes keep Ashby's names; this table is the key between them.
 
 ## 10. Amendments
 
-None yet. Each amendment is dated, says what changed and why, and is committed before the code
-or run that depends on it.
+Each amendment is dated, says what changed and why, and is committed before the code or run
+that depends on it.
+
+**A1 (2026-11-09, before the loop code).** A request is one GET attempt. Redirect hops inside
+one attempt are recorded in the trace but are bounded by `http.max_redirects` (3), not by
+`max_requests`. Reason: the JS1 fetcher follows redirects inside one call, so counting hops
+against the budget would mean putting the budget inside the transport. None of the planned
+boards redirects. Drafted by Claude while designing the fetcher; for Shubham to accept.

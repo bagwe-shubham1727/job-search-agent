@@ -13,6 +13,7 @@ Every command builds its collaborators from the real modules, inside the command
   judgment is an honest ``UNAVAILABLE`` and the run is PARTIAL_FAILURE.
 * ``privacy.sensitive_values`` and ``privacy.scan_tree``: ``jsa audit-privacy``.
 * ``experiments.cli.register``: the ``jsa exp ...`` group.
+* ``watch_cli.register``: the ``jsa watch ...`` group (JS2, GATE.md; exits 8-10).
 
 Exit codes follow PLAN §1.4: 0 BASELINE/SUCCESS_*, 1 PARTIAL_FAILURE, 2 fetch or
 response failure, 3 résumé refused, 4 state corrupt, 5 configuration error; 6 is the
@@ -100,6 +101,7 @@ from job_search_agent.state import (
     state_to_bytes,
 )
 from job_search_agent.sysio import SubprocessGit, SubprocessRunner, minimal_env
+from job_search_agent.watch_cli import register as register_watch
 
 Handler = Callable[[argparse.Namespace], int]
 """A subcommand handler: receives parsed arguments, returns the exit code."""
@@ -685,6 +687,7 @@ _REGISTRY: tuple[Callable[[Subparsers], None], ...] = (
     _add_audit_privacy,
     _add_docs,
     register_experiments,
+    lambda sub: register_watch(sub, build_run_deps),
 )
 
 
