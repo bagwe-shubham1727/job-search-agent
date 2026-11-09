@@ -96,4 +96,19 @@ NOT CHECKED:
 
 ## What was done about each finding
 
-(Filled in as the fixes were committed; see below.)
+| # | Finding | What was done | Commit |
+|---|---|---|---|
+| 1 | This file and "the fixes" did not exist yet | This file is the report; the fixes are below | `832f1ec` |
+| 2 | Packaging guard missed placeholders | Guard greps README, FRICTIONAL, SOURCES, GATE and `docs/js2/` (except the two files that quote the marker) and refuses while `GATE.md` is still a draft | `5e6eb70` |
+| 3 | Budget-refused retry discarded the real failure | Test strengthened and red first, then fixed: the board keeps HTTP 503 and its saved body; `retry_skipped` says `max_requests` | `7e01e26` |
+| 4 | The plan defined its own policy | Code ceilings `HOST_CEILING` and `WRITE_CEILING`; plan read-checked before parsing and refused if writable; predictions B21–B25 in GATE A3 before the tests | `e1e41b5`, `0c48e2e` |
+| 5 | `check_action` unused; résumé read unchecked | Résumé read checked at loop start (B26). Never-actions reworded precisely: enforced by having no such tool plus GET-only; `check_action` kept as the name-level list | `0c48e2e`, `e1e41b5`, POLICY.md |
+| 6 | A2 said the floors were Shubham's | A3 item 6 corrects it; A2 carries a pointer to the correction | `e1e41b5`, `5e6eb70` |
+| 7 | Driver's seat written in Shubham's voice | The column is labelled "Claude's draft; Shubham edits" | `5e6eb70` |
+| 8 | Checker relaxed after it disagreed | Reworked: facts plus one decisive "is the failure justified" row; new test catches an agent that fails a good board; the original red output is kept | `32d0d8c` |
+| 9 | Reset did not validate the token | Validated with the provider first; B27 | `0c48e2e` |
+| 10 | Nothing in the review is the student's yet | Left for Shubham: his commands, his decision, ideally his own test (`docs/js2/FOR_SHUBHAM.md`) | — |
+| nits | Stale counts; per-board repeat counter; dead tuple slot; `Any` return; `run_loop` docstring; build log stops at 03:18 | Fixed (`7e01e26`, `b187a32`, `0c48e2e`, `5e6eb70`, this commit) | |
+| nits not changed | `plan_boards` returns `list \| str`; `DEFAULT_PLAN_PATH` is relative to the current directory (same convention as JS1's `config/agent.toml`); "first parse only" design; Ashby `secondaryLocations` | Kept and disclosed; the first-parse design is Shubham's accept/revise call | |
+
+After the fixes: `uv run pytest -q` 1092 passed; `ruff check .`, `ruff format --check .` and `mypy src` clean (run by Claude).

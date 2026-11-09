@@ -21,6 +21,15 @@ the course AI policy says Claude must not invent his struggle or understanding.
 | 03:16 | **Wrong-board runs.** `greenhouse/ramp` ended `FINISHED` twice (`BASELINE`, then `SUCCESS_NO_NEW`). The independent check failed it on 3 checks. | `e8816e4`; `docs/js2/FINISHED_WRONG.md` |
 | 03:17–03:18 | Wrote GATE A2 (a board below its floor is a failed board), then the test, committed red before any patch. | `b4582e7`, `affcbdd`, `docs/js2/review/red-before-patch.txt` |
 | 03:18 | Sent the patch request to a fresh Claude Code subagent in an isolated worktree. A local plugin hook appended its own tool-usage block to that prompt; the request text itself is in `docs/js2/review/PROMPT.md`. | `4f22eec` |
+| 03:23 | Patch came back. Its worktree had started from the stale `origin/main` (JS1), so the subagent fast-forwarded it to local `main` without committing. Claude read the diff, applied it unchanged to `main`, and ran ruff, mypy, the floor test (7 passed) and the full suite (1083 passed). | `8259d8b`, `docs/js2/review/` |
+| 03:23 | Re-ran the wrong-board plan live on the patched code: `greenhouse/ramp` now `below_floor`, exit `ERROR`, state byte-identical. | `c3e937f` |
+| 03:24 | Claude mistake, caught later: relaxed the checker so a failed board's missed expectations counted as agreement. | `c51335d` (see 03:40) |
+| 03:25 | Mutated the patch three ways: two mutations caught, "floor every parse" survives every test. | `docs/js2/review/mutations.txt` |
+| 03:27 | **Live run 2** on the patched code with floors: four boards `SUCCESS_NO_NEW`, no floor tripped, `linearapp` 404 again, exit `INCOMPLETE`. | `3019f50` |
+| 03:28–03:37 | A fresh reviewer agent reviewed everything: **NEEDS_CHANGES**, 2 blockers and 8 should-fix items, three of them reproduced with scratch tests. | `832f1ec`, `docs/js2/REVIEW_BY_AGENT.md` |
+| 03:37 | Fix: a retry the budget refuses had replaced the real 503 (and its saved body) with a synthetic budget error. Test strengthened first (red), then fixed. | `7e01e26` |
+| 03:38–03:39 | The plan file could widen its own policy (any host, `write_root = "data"`). Wrote A3 with predictions B21–B27, then the ceilings, the read-before-parse check, the résumé read check and reset-token validation. | `e1e41b5`, `0c48e2e` |
+| 03:40 | Checker reworked: a failed board's expectations are facts; one decisive row asks whether the failure is justified. The pre-relaxation output is kept. | `32d0d8c` |
 
 ## Things that are still open
 
@@ -30,3 +39,6 @@ the course AI policy says Claude must not invent his struggle or understanding.
   arrives one commit later, so the tests do not run on that single commit. Every later commit
   runs.
 - No live retry happened in any run; retries are shown only by constructed tests.
+- `FlooredProvider` floors "the first parse", which depends on `pipeline.run_once` parsing the
+  live body first (mutation m2). The review packet names the better design; that is Shubham's
+  accept/revise call.
