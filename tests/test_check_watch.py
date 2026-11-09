@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import shutil
 from pathlib import Path
 from types import ModuleType
 
@@ -26,7 +28,7 @@ def _checker() -> ModuleType:
 
 def _failures(loop_dir: Path) -> set[tuple[str, str]]:
     rows = _checker().check_loop(loop_dir, EXPECTATIONS)
-    return {(board, check) for board, check, passed, _ in rows if not passed}
+    return {(board, check) for board, check, passed, _ in rows if passed is False}
 
 
 def test_live_run_1_passes_every_check() -> None:
@@ -43,6 +45,19 @@ def test_wrong_board_run_is_caught() -> None:
 
 def test_after_patch_run_agrees_with_the_check() -> None:
     assert _failures(AFTER_PATCH_RUN) == set()
+
+
+def test_checker_fails_an_agent_that_failed_a_good_board(tmp_path: Path) -> None:
+    """Constructed from live run 1: ``ashby/ramp`` relabelled FAILED by hand."""
+    loop = tmp_path / "loop"
+    loop.mkdir()
+    shutil.copyfile(LIVE_RUN_1 / "trace.jsonl", loop / "trace.jsonl")
+    report = json.loads((LIVE_RUN_1 / "report.json").read_text())
+    for board in report["boards"]:
+        if board["board"] == "ashby/ramp":
+            board["state"] = "FAILED"
+    (loop / "report.json").write_text(json.dumps(report))
+    assert ("ashby/ramp", "failed board misses an expectation") in _failures(loop)
 
 
 def test_checker_imports_nothing_from_the_agent() -> None:
