@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final, TypeGuard
 
@@ -35,7 +35,7 @@ def _is_json_int(value: object) -> TypeGuard[int]:
 
 
 @dataclass
-class _Collector:
+class IssueCollector:
     """Accumulates data-quality issues while one board is parsed."""
 
     issues: list[DataQualityIssue] = field(default_factory=list)
@@ -69,7 +69,7 @@ class _Collector:
         )
 
 
-def _load_json(body: bytes) -> Any:  # noqa: ANN401 - arbitrary JSON document
+def load_json(body: bytes) -> Any:  # noqa: ANN401 - arbitrary JSON document
     """Decodes the response body as strict JSON.
 
     Args:
@@ -111,7 +111,7 @@ def _check_shape(document: object) -> tuple[list[Any], int]:
     return jobs, total
 
 
-def _posting_id(job: Mapping[str, Any], index: int, out: _Collector) -> str | None:
+def _posting_id(job: Mapping[str, Any], index: int, out: IssueCollector) -> str | None:
     """Returns the canonical ID of one job, or records why it has none (A31).
 
     Args:
@@ -134,7 +134,7 @@ def _posting_id(job: Mapping[str, Any], index: int, out: _Collector) -> str | No
 
 
 def _wrong_type(
-    value: object, path: str, ctx: tuple[int, str], out: _Collector
+    value: object, path: str, ctx: tuple[int, str], out: IssueCollector
 ) -> None:
     """Records a ``WRONG_FIELD_TYPE`` warning for one optional field.
 
@@ -155,7 +155,7 @@ def _wrong_type(
 
 
 def _optional_str(
-    value: object, path: str, ctx: tuple[int, str], out: _Collector
+    value: object, path: str, ctx: tuple[int, str], out: IssueCollector
 ) -> str | None:
     """Returns ``value`` if it is a string; records a warning if it has another type.
 
@@ -177,7 +177,7 @@ def _optional_str(
 
 
 def _location_name(
-    job: Mapping[str, Any], ctx: tuple[int, str], out: _Collector
+    job: Mapping[str, Any], ctx: tuple[int, str], out: IssueCollector
 ) -> str | None:
     """Reads ``$.location.name``; ``None`` when it is absent or not a string (A30).
 
@@ -223,7 +223,7 @@ def _location_name(
 
 
 def _department_names(
-    job: Mapping[str, Any], ctx: tuple[int, str], out: _Collector
+    job: Mapping[str, Any], ctx: tuple[int, str], out: IssueCollector
 ) -> tuple[str, ...]:
     """Reads ``$.departments[i].name``; wrong types contribute ``""`` (index-aligned).
 
@@ -250,7 +250,7 @@ def _department_names(
 
 
 def _posting(
-    job: Mapping[str, Any], index: int, posting_id: str, out: _Collector
+    job: Mapping[str, Any], index: int, posting_id: str, out: IssueCollector
 ) -> Posting:
     """Builds the normalised view of one job with a valid ID.
 
@@ -276,12 +276,19 @@ def _posting(
     )
 
 
-def _postings(jobs: Sequence[Any], out: _Collector) -> tuple[Posting, ...]:
+IdReader = Callable[[Mapping[str, Any], int, IssueCollector], str | None]
+"""Reads one job's canonical ID or records why it has none (``_posting_id``)."""
+
+
+def normalise_postings(
+    jobs: Sequence[Any], out: IssueCollector, read_id: IdReader = _posting_id
+) -> tuple[Posting, ...]:
     """Normalises every job with a valid, first-seen ID, in board order.
 
     Args:
-        jobs: The ``jobs`` array.
+        jobs: The ``jobs`` array, in the Greenhouse field names (CONTRACT §5).
         out: Issue collector.
+        read_id: The provider's ID check; defaults to Greenhouse's positive integer.
 
     Returns:
         The valid postings; later duplicates of an ID are reported and skipped.
@@ -292,7 +299,7 @@ def _postings(jobs: Sequence[Any], out: _Collector) -> tuple[Posting, ...]:
         if not isinstance(job, dict):
             out.add(DataQualityCode.NOT_AN_OBJECT, Severity.ERROR, index=index)
             continue
-        posting_id = _posting_id(job, index, out)
+        posting_id = read_id(job, index, out)
         if posting_id is None:
             continue
         if posting_id in seen:
@@ -350,9 +357,9 @@ class GreenhouseProvider:
                 ``meta_total``, or ``no_valid_ids`` when a non-empty ``jobs`` array
                 has no posting with a valid ID.
         """
-        jobs, total = _check_shape(_load_json(body))
-        out = _Collector()
-        postings = _postings(jobs, out)
+        jobs, total = _check_shape(load_json(body))
+        out = IssueCollector()
+        postings = normalise_postings(jobs, out)
         if jobs and not postings:
             raise InvalidResponse("no_valid_ids", f"{len(jobs)} entries")
         if total != len(jobs):

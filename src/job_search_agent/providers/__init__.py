@@ -12,10 +12,11 @@ from typing import Final
 
 from job_search_agent.errors import ConfigError
 from job_search_agent.ports import BoardProvider
+from job_search_agent.providers.ashby import AshbyProvider
 from job_search_agent.providers.greenhouse import GreenhouseProvider
 
 PROVIDERS: Final[Mapping[str, Callable[[], BoardProvider]]] = MappingProxyType(
-    {"greenhouse": GreenhouseProvider}
+    {"greenhouse": GreenhouseProvider, "ashby": AshbyProvider}
 )
 """Registry name -> provider factory. Read-only."""
 
@@ -38,4 +39,4 @@ def get_provider(name: str) -> BoardProvider:
     return factory()
 
 
-__all__ = ["PROVIDERS", "GreenhouseProvider", "get_provider"]
+__all__ = ["PROVIDERS", "AshbyProvider", "GreenhouseProvider", "get_provider"]

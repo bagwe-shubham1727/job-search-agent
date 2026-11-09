@@ -16,7 +16,8 @@ Conventions used throughout this module:
   absolute, so outputs never leak a home directory. Paths handed to
   ``fsio.OutputRoot`` are relative to the data directory instead; the two kinds are
   kept apart by name (``*_ref`` / ``path`` here, ``rel`` in ``fsio``).
-* **Posting IDs are canonical decimal strings** of a positive JSON integer (A31).
+* **Posting IDs are canonical strings**: the decimal string of a positive JSON integer
+  (Greenhouse, A31) or a lowercase UUID (Ashby, GATE §9).
 * **Timestamps are timezone-aware.** ``*_utc`` fields are UTC; ``*_et`` fields are the
   same instant in America/New_York (A22).
 * Models record facts; they do not enforce rule semantics. For example a
@@ -127,6 +128,10 @@ class FetchErrorKind(StrEnum):
     """Replay: the saved raw file or its meta could not be read under ``ReadPolicy``."""
     REPLAY_DIGEST_MISMATCH = "REPLAY_DIGEST_MISMATCH"
     """Replay: the saved raw file's sha256 differs from its ``.meta.json``."""
+    POLICY_REFUSED = "POLICY_REFUSED"
+    """Watch loop: the permission policy refused the request (GATE §6)."""
+    BUDGET_EXHAUSTED = "BUDGET_EXHAUSTED"
+    """Watch loop: no request or time budget was left for this request (GATE §3)."""
 
 
 class SourceKind(StrEnum):
@@ -220,6 +225,7 @@ PRE_SPAWN_ERRORS: frozenset[BackendErrorKind] = frozenset(
 class ExitCode(IntEnum):
     """Process exit codes of ``jsa`` (PLAN §1.4).
 
+    ``WATCH_*`` (8-10) are the non-zero exits of ``jsa watch run`` (GATE §2).
     ``EXPERIMENT_REFUSED`` (6) is ``jsa exp ...`` refusing at an ordering gate or
     input check. ``LOCKED`` (7) means another ``jsa`` process holds the data lock
     for the same mode (``data/<live|seeded>/.lock``), or a run with the same
@@ -235,6 +241,9 @@ class ExitCode(IntEnum):
     CONFIG_ERROR = 5
     EXPERIMENT_REFUSED = 6
     LOCKED = 7
+    WATCH_INCOMPLETE = 8
+    WATCH_BUDGET_EXHAUSTED = 9
+    WATCH_ERROR = 10
 
 
 _STATUS_EXIT_CODES: Mapping[RunStatus, ExitCode] = {
@@ -273,8 +282,13 @@ strict=True)`` accepts the plain JSON string.
 Sha256Hex = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 """Lowercase hexadecimal SHA-256 digest."""
 
-PostingId = Annotated[str, StringConstraints(pattern=r"^[1-9][0-9]*$")]
-"""Canonical decimal string of a positive integer posting ID."""
+UUID_PATTERN = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+"""A lowercase UUID, as Ashby writes posting IDs (GATE §9)."""
+
+PostingId = Annotated[
+    str, StringConstraints(pattern=rf"^(?:[1-9][0-9]*|{UUID_PATTERN})$")
+]
+"""Canonical posting ID: a positive decimal string (Greenhouse) or a lowercase UUID."""
 
 RUN_ID_PATTERN = r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z(-SEEDED)?$"
 """``YYYY-MM-DDTHH-MM-SSZ`` in UTC, with ``-SEEDED`` appended for replay runs."""
