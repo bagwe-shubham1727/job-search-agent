@@ -205,3 +205,36 @@ Reason: `greenhouse/ramp` ended `FINISHED` and `SUCCESS_NO_NEW` with one stale p
 Ashby. Only the independent check caught it. The loop cannot see which system a careers page
 links to (that host is off the allow-list, on purpose), so the floor is the part of that
 check the loop can enforce itself. Drafted by Claude; for Shubham to accept.
+
+**A3 (2026-11-09, after the independent review in `docs/js2/REVIEW_BY_AGENT.md`; predictions
+written before the new tests ran).** Corrections:
+
+1. **The plan cannot widen the policy.** The hosts and the write folder are ceilings in code
+   (`policy.HOST_CEILING`, `policy.WRITE_CEILING = "data/watch"`). A plan may narrow them, never
+   widen them. The plan file must pass the read check *before* it is parsed, and must not lie
+   anywhere the agent can write. Before this, a plan passed with `--plan` could allow any host or
+   set `write_root = "data"`.
+2. **The résumé read is checked.** At loop start the résumé path must pass the read check
+   (never `private/`), or the loop ends `ERROR` before any request.
+3. **Never-actions, stated precisely.** They are enforced by the agent having no tool that could
+   apply, email, message or log in, and by GET-only requests (B06). `check_action` is the
+   name-level list (B19); no current tool calls it.
+4. **A retry the budget forbids** leaves the board with its real failure and saved body (GATE §5),
+   not a synthetic budget error. **The repeat counter** spans the whole loop run (GATE §4), not
+   one board.
+5. **`jsa watch reset` validates the board token** with the provider, as the plan check does,
+   before it asks anything.
+6. **Wording of A2:** the floors were drafted by Claude from that morning's counts, for Shubham to
+   confirm; they were not written by Shubham.
+
+New boundary cases and their predictions:
+
+| # | Request | Predicted result |
+|---|---|---|
+| B21 | A plan allowing `jobs.lever.co` | Refused before any request (`ConfigError`: hosts outside GATE §6) |
+| B22 | A plan with `write_root = "data"` | Refused (`ConfigError`: write_root must be inside `data/watch`) |
+| B23 | A plan file inside `data/watch/` | Refused before parsing (`ConfigError`: the agent could write it) |
+| B24 | A plan file in `private/` | Refused before parsing (read: `private`) |
+| B25 | A plan with `write_root = "data/watch/sub"` and only the Greenhouse host | Allowed (narrowing is fine) |
+| B26 | `config/agent.toml` points the résumé at `private/` | Loop `ERROR`, `resume_read_refused:private`, 0 requests |
+| B27 | `jsa watch reset greenhouse/x/../ashby-ramp` | Refused as an invalid token, nothing asked, nothing deleted |
