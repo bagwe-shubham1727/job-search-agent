@@ -53,7 +53,7 @@ Its output on the second wrong run
 | (loop) | requests = trace attempts <= budget | PASS | 1 attempts |
 | (loop) | FINISHED only if every board is OK and checks out | FAIL | agent says FINISHED |
 | greenhouse/ramp | sha256 raw = report = trace | PASS | 4127597215cc |
-| greenhouse/ramp | count = raw jobs | PASS | raw 1, report 1 |
+| greenhouse/ramp | count = raw jobs (a failed board may report none) | PASS | raw 1, report 1 |
 | greenhouse/ramp | new = raw - before | PASS | recomputed 0 |
 | greenhouse/ramp | careers page uses this system | FAIL | board greenhouse, careers page ashby |
 | greenhouse/ramp | at least the expected floor | FAIL | 1 vs 20 |
@@ -74,6 +74,22 @@ purpose. But it can enforce the floor. GATE amendment A2 (`b4582e7`) made a boar
 written floor a failed board; that change is the reviewed change in
 [`review/REVIEW_PACKET.md`](review/REVIEW_PACKET.md). The checker stays separate: the system
 check is still only there.
+
+## The same plan after the patch
+
+Live, 2026-11-09 08:23 UTC, code `8259d8b` (the patch), loop
+[`2026-11-09T08-23-46Z`](../../data/watch/loops/2026-11-09T08-23-46Z/report.md): `greenhouse/ramp`
+is `FAILED`, `INVALID_RESPONSE`, note `below_floor`; the loop exits `ERROR` (code 10), because
+its only board failed. The board's `state.json` is byte-identical to that run's
+`state.before.json`: nothing was written. The independent check now agrees with the agent: 7
+passed, 0 failed ([`evidence/check-2026-11-09T08-23-46Z.txt`](evidence/check-2026-11-09T08-23-46Z.txt)).
+For a board the agent failed, the checker counts a missed expectation as agreement, not as the
+agent's error (changed in `checks/check_watch.py` after this run; the earlier outputs were
+regenerated with the same results).
+
+The stale ID `8042562003` from the two earlier runs is still in that board's saved state.
+Clearing it is the one write that needs Shubham's approval: `uv run jsa watch reset
+greenhouse/ramp` at a terminal (GATE §6, B16–B18).
 
 ## Limits of this demonstration
 

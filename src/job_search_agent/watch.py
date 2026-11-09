@@ -812,6 +812,8 @@ def render_report(report: LoopReport) -> str:
         if b.fetch_error is not None:
             detail.append(b.fetch_error.value)
         detail.append(f"{b.requests} request(s)")
+        if b.note and b.note != cell(b.run_status):
+            detail.append(b.note)
         lines.append(f"- `{b.board}`: " + ", ".join(detail))
     return "\n".join(lines) + "\n"
 

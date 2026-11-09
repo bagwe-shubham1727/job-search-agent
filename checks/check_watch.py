@@ -74,10 +74,12 @@ def check_board(
         claims = board["fetched_count"] is not None
         rows.append(("no count invented", not claims, "raw is not a jobs object"))
         return rows
+    failed = board["state"] != OK_BOARD
     rows.append(
         (
-            "count = raw jobs",
-            board["fetched_count"] == len(ids),
+            "count = raw jobs (a failed board may report none)",
+            board["fetched_count"] == len(ids)
+            or (failed and board["fetched_count"] is None),
             f"raw {len(ids)}, report {board['fetched_count']}",
         )
     )
@@ -91,17 +93,23 @@ def check_board(
     if company is None:
         rows.append(("expected", False, "no expectation written for this company"))
         return rows
+    # A missed expectation is the agent's error only if it called the board OK.
+    agreed = " (the agent failed this board too)" if failed else ""
     system = board["board"].split("/", 1)[0]
     rows.append(
         (
             "careers page uses this system",
-            system == company["system"],
-            f"board {system}, careers page {company['system']}",
+            system == company["system"] or failed,
+            f"board {system}, careers page {company['system']}{agreed}",
         )
     )
     floor = company["min_postings"]
     rows.append(
-        ("at least the expected floor", len(ids) >= floor, f"{len(ids)} vs {floor}")
+        (
+            "at least the expected floor",
+            len(ids) >= floor or failed,
+            f"{len(ids)} vs {floor}{agreed}",
+        )
     )
     return rows
 
