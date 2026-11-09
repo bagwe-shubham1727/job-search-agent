@@ -183,7 +183,7 @@ raw bytes keep Ashby's names; this table is the key between them.
 Each amendment is dated, says what changed and why, and is committed before the code or run
 that depends on it.
 
-**A1 (2026-11-09, before the loop code).** A request is one GET attempt. Redirect hops inside
+**A1 (2026-11-09, written while designing the fetcher; committed with the loop code in 0afcf05).** A request is one GET attempt. Redirect hops inside
 one attempt are recorded in the trace but are bounded by `http.max_redirects` (3), not by
 `max_requests`. Reason: the JS1 fetcher follows redirects inside one call, so counting hops
 against the budget would mean putting the budget inside the transport. None of the planned
