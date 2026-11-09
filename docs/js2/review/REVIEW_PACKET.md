@@ -1,0 +1,128 @@
+# Review packet: the GATE A2 floor change
+
+**The change:** a planned board may carry `min_postings`. A board whose response parses but
+lists fewer postings than its floor is a failed board (`INVALID_RESPONSE`, note `below_floor`),
+its state is not written, and the loop cannot end `FINISHED`. Why it is non-trivial: it changes
+when the loop may say "finished", it must not write state, and it must leave JS1's `jsa run` and
+the empty-board rule alone.
+
+**Who did what.** Claude (this orchestrating session) wrote amendment A2 and the test. A fresh
+Claude Code subagent, with no shared conversation, wrote the patch in an isolated worktree from
+the request in [`PROMPT.md`](PROMPT.md). Claude then read the diff and ran the checks below. The
+decision at the end is Shubham's.
+
+## 1. The defect, reproduced first
+
+Two live runs on 2026-11-09 08:16 UTC (code `e54a26d`) of `config/watch-wrong-board.toml`
+ended `FINISHED`, the second with `SUCCESS_NO_NEW`, for `greenhouse/ramp`: one stale posting
+("Copy of Chief Legal Officer", "dublin") while Ramp's real board on Ashby lists 169. Only the
+independent check caught it (3 failures). Full account:
+[`../FINISHED_WRONG.md`](../FINISHED_WRONG.md).
+
+## 2. The test, written before the patch
+
+Order in git, each committed before the next existed:
+
+| Commit | What |
+|---|---|
+| `e8816e4` | The wrong runs and the check's failure, committed as evidence |
+| `b4582e7` | GATE amendment A2: the written decision |
+| `affcbdd` | [`tests/watch/test_floor.py`](../../../tests/watch/test_floor.py), 7 test cases |
+| `4f22eec` | The red run and the request to Claude Code |
+| `8259d8b` | The patch, applied unchanged from the subagent's worktree |
+
+Red on `affcbdd` ([`red-before-patch.txt`](red-before-patch.txt)): **4 failed, 3 passed**. The
+four fail because the plan has no `min_postings` field at all (`Extra inputs are not
+permitted`), so the feature is missing rather than wrong; the loop-level misbehaviour itself is
+the live reproduction in §1. Of the three that passed before the patch:
+`test_board_without_a_floor_has_no_floor` is meant to (no floor means no change), and the two
+cases of `test_floor_must_be_positive` passed **for the wrong reason**: the old plan refused
+every extra key. They only discriminate after the patch.
+
+Green on `8259d8b` ([`green-after-patch.txt`](green-after-patch.txt)): 7 passed; full suite
+**1083 passed**. No test file changed in the patch.
+
+## 3. The diff, read as a change in behaviour
+
+The diff is [`patch.diff`](patch.diff) (69 lines added, 6 removed; `watch.py` and the two plans).
+
+| Before | After |
+|---|---|
+| A plan entry with `min_postings` is refused (`ConfigError`). | `BoardEntry.min_postings: int \| None`, at least 1; absent means no floor. |
+| `greenhouse/ramp` with 1 posting: `BASELINE`/`SUCCESS_NO_NEW`, board OK, loop `FINISHED`, the stale ID saved in state. | The board's provider is wrapped in `FlooredProvider`. Its first `parse` raises `InvalidResponse("below_floor", "1 < 20")`; JS1's `run_once` already turns that into `INVALID_RESPONSE` and writes no state; the raw response was saved before the parse and is kept. The board is FAILED with note `below_floor`; the loop cannot be `FINISHED`. |
+| Empty board: `EMPTY_RESPONSE`. | Unchanged: the floor is skipped when `is_empty`. |
+| `jsa run`, `pipeline.py`, `board_ok`, `decide_exit`. | Unchanged. The wrapper exists only inside the watch loop, and only for a board with a floor. |
+| Plans: no floors. | `config/watch.toml`: Stripe 100, Figma 20, Ramp 20, Linear 5, none for `linearapp`. `config/watch-wrong-board.toml`: `greenhouse/ramp` 20. These are A2's numbers. |
+
+One design choice the subagent made and flagged: **only the first `parse` in a run is
+floored.** `run_once` parses the live response first, then may re-parse older saved responses to
+retry pending judgments (JS1 A26); flooring those would make an old saved response unreadable
+for a retry. This is correct today, but it depends on `pipeline.run_once` parsing the live body
+first, which nothing outside the docstring enforces (see §6).
+
+## 4. Did it stay in scope?
+
+Yes, for the code: three files, all named by the request; no test edited; no unrelated refactor;
+no change to JS1 behaviour (the full suite, including every JS1 test, passes). Two things the
+subagent did that the request did not name, both reported by it:
+
+- Its worktree started from the stale `origin/main` (`4b6c80f`, JS1), where none of the JS2 files
+  existed. It ran `git merge --ff-only main` inside the worktree to reach `4f22eec`. That made no
+  commit and did not touch `main`.
+- The first `uv run` built a `.venv` inside the worktree (23 packages from `uv.lock`); nothing was
+  installed outside the project.
+
+## 5. Commands run
+
+**By the subagent** (its report): `uv run ruff format src tests` (124 files unchanged),
+`uv run ruff check src tests` (2 long docstring lines on the first run, fixed, then all passed),
+`uv run mypy src` (no issues, 51 files), `uv run pytest -q` (1083 passed),
+`uv run pytest -q tests/watch/test_floor.py` (7 passed), and `load_plan` on both plans.
+
+**By Claude, after reading the diff:**
+
+| Command | Result |
+|---|---|
+| `git apply --check docs/js2/review/patch.diff` then `git apply` on `main` | Clean |
+| `uv run ruff check src tests`, `uv run mypy src` | All passed; no issues |
+| `uv run pytest -q -p no:cacheprovider tests/watch/test_floor.py` | 7 passed |
+| `uv run pytest -q -p no:cacheprovider` | 1083 passed |
+| `uv run jsa watch run --plan config/watch-wrong-board.toml` (live) | `ERROR`, `greenhouse/ramp` `INVALID_RESPONSE` `below_floor`, exit 10 |
+| `cmp` the board's `state.json` with that run's `state.before.json` | Identical: no state written |
+| `uv run python checks/check_watch.py data/watch/loops/2026-11-09T08-23-46Z` | 7 passed, 0 failed |
+| Three mutations of the patch ([`mutations.txt`](mutations.txt)) | `<=` caught; flooring empty boards caught; **flooring every parse survives** |
+
+**By Shubham** (to fill in: run these yourself and paste what you see):
+
+```bash
+git checkout affcbdd && uv run pytest -q -p no:cacheprovider tests/watch/test_floor.py   # expect 4 failed, 3 passed
+git checkout main    && uv run pytest -q -p no:cacheprovider tests/watch/test_floor.py   # expect 7 passed
+git show 8259d8b --stat && git show 8259d8b -- src/job_search_agent/watch.py             # read the diff yourself
+uv run pytest -q                                                                          # expect every test to pass
+uv run python checks/check_watch.py data/watch/loops/2026-11-09T08-23-46Z                 # expect 0 failed
+```
+
+[Shubham: what you ran, when, and what it printed.]
+
+## 6. Decision
+
+**Claude's recommendation: accept.** Evidence: the defect is reproduced live (§1); the test
+existed before the patch and was red (§2); the patch is in scope and leaves JS1 alone (§3, §4);
+1083 tests pass; the patched loop fails the real stale board without writing its state, and the
+independent check agrees (§5). If you would rather revise, the one revision worth making is to
+remove the ordering dependency: floor the live response explicitly (for example, check the
+count in `LoopFetcher`'s result before `run_once` parses it) instead of "the first parse".
+
+**Shubham's decision:** [accept / revise / reject] — [why, citing the evidence above] —
+[name, date]
+
+## 7. One case the test would still miss
+
+**Flooring every parse instead of only the first.** Mutation m2 changes `FlooredProvider` to
+floor every `parse` call, and all 76 tests in `tests/watch` still pass. No test has a board with
+a pending judgment whose older saved response is below the floor, so nothing checks that a
+pending retry can still read it. The same gap means no test would notice if `run_once` ever
+parsed a saved response before the live one.
+
+Two more the floor cannot catch at all: a stale board that still lists more postings than its
+floor, and a floor written too low by hand.
