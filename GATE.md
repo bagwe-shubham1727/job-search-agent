@@ -188,3 +188,20 @@ one attempt are recorded in the trace but are bounded by `http.max_redirects` (3
 `max_requests`. Reason: the JS1 fetcher follows redirects inside one call, so counting hops
 against the budget would mean putting the budget inside the transport. None of the planned
 boards redirects. Drafted by Claude while designing the fetcher; for Shubham to accept.
+
+**A2 (2026-11-09, after the finished-wrong-answer runs `2026-11-09T08-16-13Z` and
+`2026-11-09T08-16-16Z`, before the test and the patch).** A planned board may carry
+`min_postings`, a floor written by Shubham from the company's careers page (the same numbers
+as `checks/expectations.toml`). When a board's response parses but lists fewer postings than
+its floor, the board is a **failed board**: its JS1 run is `INVALID_RESPONSE` with the code
+`below_floor`, its state is not written, its saved response is kept, and the loop cannot end
+`FINISHED`. An empty board stays `EMPTY_RESPONSE`. A board with no `min_postings` has no floor.
+A floor changes only by a new amendment. Floors for the current plans: `greenhouse/stripe`
+100, `greenhouse/figma` 20, `ashby/ramp` 20, `ashby/linear` 5, and `greenhouse/ramp` 20 (it is
+Ramp). The deliberately bad `ashby/linearapp` keeps no floor: it must fail by its 404 alone.
+
+Reason: `greenhouse/ramp` ended `FINISHED` and `SUCCESS_NO_NEW` with one stale posting
+("Copy of Chief Legal Officer", location "dublin") while Ramp's careers page lists 169 jobs on
+Ashby. Only the independent check caught it. The loop cannot see which system a careers page
+links to (that host is off the allow-list, on purpose), so the floor is the part of that
+check the loop can enforce itself. Drafted by Claude; for Shubham to accept.
