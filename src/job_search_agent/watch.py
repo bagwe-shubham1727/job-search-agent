@@ -748,7 +748,13 @@ def render_report(report: LoopReport) -> str:
     if not attention:
         lines.append("Nothing: every planned board was checked.")
     for b in attention:
-        lines.append(f"- `{b.board}`: {b.state.value} {cell(b.run_status)} {b.note}")
+        detail = [b.state.value, cell(b.run_status)]
+        if b.http_status is not None:
+            detail.append(f"HTTP {b.http_status}")
+        if b.fetch_error is not None:
+            detail.append(b.fetch_error.value)
+        detail.append(f"{b.requests} request(s)")
+        lines.append(f"- `{b.board}`: " + ", ".join(detail))
     return "\n".join(lines) + "\n"
 
 

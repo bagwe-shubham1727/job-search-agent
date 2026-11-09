@@ -32,3 +32,4 @@ data/*/.lock
 
 # Trial runs with `jsa --data-dir data/scratch ...`; never graded evidence
 data/scratch/
+data/watch/**/.lock
