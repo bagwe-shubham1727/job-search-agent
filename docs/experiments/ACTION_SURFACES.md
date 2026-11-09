@@ -12,7 +12,7 @@ uv run jsa exp surfaces run c
 uv run jsa exp surfaces capture
 ```
 
-**Raw evidence.** Per surface in `data/experiments/surfaces/<a|b|c>/`: the exact argv and working directory (`run.json`), the prompt (`prompt.txt`), the full Claude Code transcript (`transcript.jsonl`), observed tool use and cost (`observed.json`), and the sandbox tree before and after (`before.tree.json`, `after.tree.json`, `diff.json`). For (c), `independent/raw.json` is our own allow-listed fetch used to check the agent's IDs. Absolute paths in the transcripts were replaced with `<repo>`; `REDACTIONS.json` records the SHA-256 of each file before and after. Generated table: `data/experiments/surfaces/ACTION_SURFACES.tables.md`.
+**Raw evidence.** Per surface in `data/experiments/surfaces/<a|b|c>/`: the exact argv and working directory (`run.json`), the prompt (`prompt.txt`), the full Claude Code transcript (`transcript.jsonl`, kept on Shubham's machine and not committed, per the course brief; its SHA-256 is in `REDACTIONS.json`), observed tool use and cost (`observed.json`), and the sandbox tree before and after (`before.tree.json`, `after.tree.json`, `diff.json`). For (c), `independent/raw.json` is our own allow-listed fetch used to check the agent's IDs. Absolute paths in the transcripts were replaced with `<repo>`; `REDACTIONS.json` records the SHA-256 of each file before and after. Generated table: `data/experiments/surfaces/ACTION_SURFACES.tables.md`.
 
 ## Results
 
