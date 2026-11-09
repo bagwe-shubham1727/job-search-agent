@@ -83,9 +83,17 @@ is `FAILED`, `INVALID_RESPONSE`, note `below_floor`; the loop exits `ERROR` (cod
 its only board failed. The board's `state.json` is byte-identical to that run's
 `state.before.json`: nothing was written. The independent check now agrees with the agent: 7
 passed, 0 failed ([`evidence/check-2026-11-09T08-23-46Z.txt`](evidence/check-2026-11-09T08-23-46Z.txt)).
-For a board the agent failed, the checker counts a missed expectation as agreement, not as the
-agent's error (changed in `checks/check_watch.py` after this run; the earlier outputs were
-regenerated with the same results).
+How the checker treats a board the agent failed changed twice, and both versions are on record.
+The checker as first written reported this run as 3 failed, because it expected a count and
+expectations met even from a board the agent had failed
+([`evidence/check-2026-11-09T08-23-46Z.original-checker.txt`](evidence/check-2026-11-09T08-23-46Z.original-checker.txt)).
+Claude then relaxed it (`c51335d`) so that a failed board's missed expectations counted as
+agreement. The independent review pointed out that this made the checker unable to catch an agent
+that wrongly fails a good board. The current version (`32d0d8c`) records a failed board's
+expectations as facts and has one decisive row: the failure must be justified by a missed
+expectation. `tests/test_check_watch.py` checks that it now fails a constructed copy of run 1 in
+which `ashby/ramp` is marked FAILED. All five runs' check outputs were regenerated with this
+version; the wrong runs still fail 3 checks, and this run passes 6 with 0 failures.
 
 The stale ID `8042562003` from the two earlier runs is still in that board's saved state.
 Clearing it is the one write that needs Shubham's approval: `uv run jsa watch reset
