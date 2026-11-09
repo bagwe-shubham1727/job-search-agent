@@ -111,4 +111,4 @@ NOT CHECKED:
 | nits | Stale counts; per-board repeat counter; dead tuple slot; `Any` return; `run_loop` docstring; build log stops at 03:18 | Fixed (`7e01e26`, `b187a32`, `0c48e2e`, `5e6eb70`, this commit) | |
 | nits not changed | `plan_boards` returns `list \| str`; `DEFAULT_PLAN_PATH` is relative to the current directory (same convention as JS1's `config/agent.toml`); "first parse only" design; Ashby `secondaryLocations` | Kept and disclosed; the first-parse design is Shubham's accept/revise call | |
 
-After the fixes: `uv run pytest -q` 1092 passed; `ruff check .`, `ruff format --check .` and `mypy src` clean (run by Claude).
+After the fixes: `uv run pytest -q` 1093 passed; `ruff check .`, `ruff format --check .` and `mypy src` clean (run by Claude).
