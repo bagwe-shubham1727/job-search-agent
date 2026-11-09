@@ -92,7 +92,7 @@ subagent did that the request did not name, both reported by it:
 | `uv run python checks/check_watch.py data/watch/loops/2026-11-09T08-23-46Z` | 7 passed, 0 failed |
 | Three mutations of the patch ([`mutations.txt`](mutations.txt)) | `<=` caught; flooring empty boards caught; **flooring every parse survives** |
 
-After the independent review, later commits fixed other parts of the loop (`docs/js2/REVIEW_BY_AGENT.md`); the full suite is 1093 tests at the end of the session. None of those commits changed `FlooredProvider`.
+After the independent review, later commits fixed other parts of the loop (`docs/js2/REVIEW_BY_AGENT.md`); the full suite is 1096 tests after the second audit (GATE A4). None of those commits changed `FlooredProvider`.
 
 **By Shubham** (to fill in: run these yourself and paste what you see):
 

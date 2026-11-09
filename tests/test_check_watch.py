@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import shutil
@@ -63,3 +64,28 @@ def test_checker_fails_an_agent_that_failed_a_good_board(tmp_path: Path) -> None
 def test_checker_imports_nothing_from_the_agent() -> None:
     source = (REPO_ROOT / "checks/check_watch.py").read_text()
     assert "job_search_agent" not in source
+
+
+def test_count_includes_a_job_without_an_id(tmp_path: Path) -> None:
+    """The agent counts every listed job; the checker must count the same way."""
+    body = json.dumps({"jobs": [{"id": 1}, {"title": "no id"}]}).encode()
+    digest = hashlib.sha256(body).hexdigest()
+    raw = tmp_path / "raw.json"
+    raw.write_bytes(body)
+    (tmp_path / "report.json").write_text(
+        json.dumps({"raw_evidence": {"path": str(raw), "sha256": digest}})
+    )
+    (tmp_path / "state.before.json").write_text("null")
+    board = {
+        "board": "greenhouse/stripe",
+        "state": "OK",
+        "run_folder": str(tmp_path),
+        "fetched_count": 2,
+        "new_count": 1,
+    }
+    trace = [
+        {"event": "tool.fetch.result", "board": "greenhouse/stripe", "sha256": digest}
+    ]
+    expect = {"stripe": {"system": "greenhouse", "min_postings": 2}}
+    rows = _checker().check_board(board, trace, expect)
+    assert [r for r in rows if r[1] is False] == []

@@ -238,3 +238,18 @@ New boundary cases and their predictions:
 | B25 | A plan with `write_root = "data/watch/sub"` and only the Greenhouse host | Allowed (narrowing is fine) |
 | B26 | `config/agent.toml` points the résumé at `private/` | Loop `ERROR`, `resume_read_refused:private`, 0 requests |
 | B27 | `jsa watch reset greenhouse/x/../ashby-ramp` | Refused as an invalid token, nothing asked, nothing deleted |
+
+**A4 (2026-11-09, after a second audit of the whole repo; drafted by Claude, for Shubham to
+accept).** Three corrections, each with its test written and seen failing first:
+
+1. **An I/O error on a board** (for example a full disk while its raw response is saved) ends the
+   loop `ERROR` like any other board error (§5), with its trace and report written. Before A4 it
+   left no report and the command exited 5. Test: `test_disk_error_still_ends_with_one_exit_and_a_report`.
+2. **The board that stops the loop** is reported `FAILED`, with the error's type as its note and
+   the requests it used, not `NOT_ATTEMPTED`. Test: `test_corrupt_state_stops_the_loop_with_error`.
+3. **The independent check counts every listed job**, as the agent does, so a job without an ID
+   no longer makes a correct agent fail the check. Only jobs with an ID can be new. Test:
+   `test_count_includes_a_job_without_an_id`. The check's output on every committed loop run is
+   unchanged.
+
+Also: Ctrl-D at the `jsa watch reset` question is a no (nothing deleted), not a crash.

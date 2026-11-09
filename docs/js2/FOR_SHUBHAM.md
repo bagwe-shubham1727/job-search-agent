@@ -4,7 +4,7 @@ Everything Claude could do is committed locally on `main`. **Nothing is pushed a
 submitted.** JS2 is due **Tuesday 2026-11-10, 11:59 pm ET**. These parts are yours by the
 course AI policy and the assignment's own wording; plan on about 1–2 hours.
 
-1. **Read and adopt `GATE.md`** (10 min). It is Claude's draft (v0.1 + A1 + A2). Change anything
+1. **Read and adopt `GATE.md`** (10 min). It is Claude's draft (v0.1 + amendments A1–A4; A3 holds the review fixes, A4 the second-audit fixes). Change anything
    you disagree with, then change the header from "draft" to v1.0 and say what you changed.
    Commit it yourself. If you change a number (a budget, a floor), tell Claude: the plans and
    tests use those numbers.

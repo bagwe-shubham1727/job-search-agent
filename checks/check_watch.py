@@ -37,13 +37,11 @@ def _trace(loop_dir: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in lines]
 
 
-def _ids(raw: Any) -> set[str] | None:  # noqa: ANN401
-    """Posting IDs in a board response, or ``None`` if it is not a jobs object."""
+def _jobs(raw: Any) -> list[Any] | None:  # noqa: ANN401
+    """The ``jobs`` list of a board response, or ``None`` if it is not a jobs object."""
     if not isinstance(raw, dict) or not isinstance(raw.get("jobs"), list):
         return None
-    return {
-        str(job["id"]) for job in raw["jobs"] if isinstance(job, dict) and "id" in job
-    }
+    return list(raw["jobs"])
 
 
 def check_board(
@@ -54,6 +52,9 @@ def check_board(
     ``passed`` is ``None`` for a fact recorded without a verdict.
     """
     rows: list[tuple[str, bool | None, str]] = []
+    if board["run_folder"] is None:
+        rows.append(("run saved", board["state"] != OK_BOARD, "the board raised"))
+        return rows
     run_dir = PROJECT / board["run_folder"]
     run = _json(run_dir / "report.json")
     raw_ref = run.get("raw_evidence")
@@ -70,20 +71,22 @@ def check_board(
     same = digest == raw_ref["sha256"] == (results[-1]["sha256"] if results else None)
     rows.append(("sha256 raw = report = trace", same, digest[:12]))
     try:
-        ids = _ids(json.loads(body))
+        jobs = _jobs(json.loads(body))
     except ValueError:
-        ids = None
-    if ids is None:
+        jobs = None
+    if jobs is None:
         claims = board["fetched_count"] is not None
         rows.append(("no count invented", not claims, "raw is not a jobs object"))
         return rows
+    # Count every listed job, as the agent does; only jobs with an ID can be new.
+    ids = {str(j["id"]) for j in jobs if isinstance(j, dict) and "id" in j}
     failed = board["state"] != OK_BOARD
     rows.append(
         (
             "count = raw jobs (a failed board may report none)",
-            board["fetched_count"] == len(ids)
+            board["fetched_count"] == len(jobs)
             or (failed and board["fetched_count"] is None),
-            f"raw {len(ids)}, report {board['fetched_count']}",
+            f"raw {len(jobs)}, report {board['fetched_count']}",
         )
     )
     before = _json(run_dir / "state.before.json")
@@ -99,9 +102,9 @@ def check_board(
     system = board["board"].split("/", 1)[0]
     floor = company["min_postings"]
     system_ok = system == company["system"]
-    floor_ok = len(ids) >= floor
+    floor_ok = len(jobs) >= floor
     system_detail = f"board {system}, careers page {company['system']}"
-    floor_detail = f"{len(ids)} vs {floor}"
+    floor_detail = f"{len(jobs)} vs {floor}"
     if not failed:
         rows.append(("careers page uses this system", system_ok, system_detail))
         rows.append(("at least the expected floor", floor_ok, floor_detail))

@@ -19,7 +19,7 @@ is yet "checked by Shubham".
 | Floor (A2) | `tests/watch/test_floor.py` (7 cases; red on `affcbdd`, green on `8259d8b`) | pass |
 | Independent check works on the real runs, and fails an agent that wrongly fails a good board | `tests/test_check_watch.py` | pass |
 | Plan ceilings, résumé read, reset token (A3) | `tests/watch/test_plan_policy.py` B21–B27 | 8 cases pass (`docs/js2/evidence/boundary-tests-a3.txt`) |
-| Whole suite | `uv run pytest -q` | 1083 passed after the patch; 1093 after the review fixes |
+| Whole suite | `uv run pytest -q` | 1083 passed after the patch; 1093 after the review fixes; 1096 after the second audit (GATE A4) |
 
 Candidates for "Checked … by a test I wrote before reading Claude's code": none yet. Every test
 above was written by Claude. If Shubham writes or rewrites a test himself before reading the

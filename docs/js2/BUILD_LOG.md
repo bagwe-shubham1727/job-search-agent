@@ -30,6 +30,7 @@ the course AI policy says Claude must not invent his struggle or understanding.
 | 03:37 | Fix: a retry the budget refuses had replaced the real 503 (and its saved body) with a synthetic budget error. Test strengthened first (red), then fixed. | `7e01e26` |
 | 03:38–03:39 | The plan file could widen its own policy (any host, `write_root = "data"`). Wrote A3 with predictions B21–B27, then the ceilings, the read-before-parse check, the résumé read check and reset-token validation. | `e1e41b5`, `0c48e2e` |
 | 03:40 | Checker reworked: a failed board's expectations are facts; one decisive row asks whether the failure is justified. The pre-relaxation output is kept. | `32d0d8c` |
+| 15:40 | Second audit of the whole repo (Claude, at Shubham's request). Fixed with tests seen failing first: an I/O error on a board left no loop report; the board that stopped the loop was listed `NOT_ATTEMPTED`; the checker counted only jobs with an ID; Ctrl-D at the reset question crashed. 1096 tests. | GATE A4 |
 
 ## Things that are still open
 

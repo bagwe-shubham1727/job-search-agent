@@ -89,7 +89,10 @@ def cmd_watch_reset(args: argparse.Namespace) -> int:
     expected = key_text(board_key(provider, token))
 
     def ask(question: str) -> bool:
-        return input(question).strip() == expected
+        try:
+            return input(question).strip() == expected
+        except EOFError:  # Ctrl-D at the prompt is a no
+            return False
 
     approver = ask if sys.stdin.isatty() else None
     verdict, deleted = reset_board(policy, provider, token, approver=approver)

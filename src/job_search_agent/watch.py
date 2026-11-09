@@ -750,14 +750,21 @@ class _Loop:
                 )
                 break
             self.meter.boards += 1
+            requests_before = self.meter.requests
             try:
                 floor = self.d.plan.boards[index].min_postings
                 self.outcomes[index] = self.run_board(key, url, floor)
-            except AgentError as exc:
-                self.trace.emit(
-                    "board.error", {"board": key_text(key), "error": type(exc).__name__}
+            except (AgentError, OSError) as exc:
+                # GATE §2: even an I/O failure ends in one exit with a written report.
+                error = type(exc).__name__
+                self.trace.emit("board.error", {"board": key_text(key), "error": error})
+                self.outcomes[index] = BoardOutcome(
+                    board=key_text(key),
+                    state=BoardState.FAILED,
+                    requests=self.meter.requests - requests_before,
+                    note=error,
                 )
-                return LoopExit.ERROR, f"{type(exc).__name__}:{key_text(key)}"
+                return LoopExit.ERROR, f"{error}:{key_text(key)}"
         boards = self.boards()
         exit_ = decide_exit(boards, stopped_by=stopped_by)
         return exit_, stopped_by or _reason(exit_, boards)

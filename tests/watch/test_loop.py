@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 import pytest
 
+from job_search_agent import watch
 from job_search_agent.events import EventLog
 from job_search_agent.http import build_fetcher_from_settings
 from job_search_agent.models import FetchErrorKind, JudgmentStatus, RunReport, RunStatus
@@ -148,9 +149,34 @@ def test_corrupt_state_stops_the_loop_with_error(p: Project) -> None:
     assert state.read_text() == "not json"
     assert [b.state for b in report.boards] == [
         BoardState.OK,
-        BoardState.NOT_ATTEMPTED,
+        BoardState.FAILED,
         BoardState.NOT_ATTEMPTED,
     ]
+    assert report.boards[1].note == "StateCorrupt"
+
+
+def test_disk_error_still_ends_with_one_exit_and_a_report(
+    p: Project, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real_run_once = watch.run_once
+
+    def run_once(deps: Any) -> RunReport:
+        if deps.config.data_dir.name == "greenhouse-figma":
+            raise OSError(28, "No space left on device")
+        return real_run_once(deps)
+
+    monkeypatch.setattr(watch, "run_once", run_once)
+    report = p.run(p.plan(THREE), three_ok())
+    assert report.exit is LoopExit.ERROR
+    assert report.reason == "OSError:greenhouse/figma"
+    assert (p.loop_dir(report) / "report.json").is_file()
+    assert p.trace(report)[-1]["event"] == "loop.finished"
+    figma = report.boards[1]
+    assert (figma.state, figma.note, figma.run_folder) == (
+        BoardState.FAILED,
+        "OSError",
+        None,
+    )
 
 
 # --- error policy -------------------------------------------------------------
