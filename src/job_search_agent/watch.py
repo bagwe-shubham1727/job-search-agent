@@ -651,7 +651,7 @@ class _Loop:
         Every plan entry gets an outcome now (``SKIPPED_REPEAT`` or
         ``NOT_ATTEMPTED``), so an early stop never drops a planned board.
         """
-        planned: list[tuple[int, tuple[str, str], str]] = []
+        planned: list[tuple[int, tuple[str, str]]] = []
         seen: set[tuple[str, str]] = set()
         for index, entry in enumerate(self.d.plan.boards):
             key = board_key(entry.provider, entry.token)
@@ -664,9 +664,9 @@ class _Loop:
                     "plan.repeat_skipped", {"board": key_text(key), "index": index}
                 )
             else:
-                planned.append((index, key, ""))
+                planned.append((index, key))
         checked: list[tuple[int, tuple[str, str], str]] = []
-        for index, key, _ in planned:
+        for index, key in planned:
             try:
                 url = get_provider(key[0]).jobs_url(key[1])
             except ConfigError:
