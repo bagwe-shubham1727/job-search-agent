@@ -27,14 +27,16 @@ course AI policy and the assignment's own wording; plan on about 1–2 hours.
 8. **Sign-off and driver's seat in `README.md`** (15 min). Facts and candidate limits are in
    `docs/js2/FACTS_FOR_SIGNOFF.md`. Fill the "Why that part stays mine" column in your words.
    Sign or withhold.
-9. **Read `docs/js2/REVIEW_BY_AGENT.md`**, the independent reviewer's report, and the fixes
-   Claude made from it.
+9. **Read `docs/js2/REVIEW_BY_AGENT.md`**, the independent reviewer's report (verbatim), and the
+   list at its end of what Claude fixed and what is left to you. Its score estimate and its
+   suggestion for the relative-quartile points are worth reading before you write anything.
 10. **Optional:** one more live run later today, `uv run jsa watch run`, so a run shows new
     postings on a different day. Commit `data/watch`.
 11. **Push and submit.**
     - Push this repo: `git push origin main`.
-    - Build the course folder and zip: `scripts/package_js2.sh` (it refuses while any
-      `[Shubham` placeholder or an unsigned sign-off remains).
+    - Build the course folder and zip: `scripts/package_js2.sh` (it refuses while a
+      `[Shubham` placeholder remains in README, FRICTIONAL, SOURCES, GATE or `docs/js2/`, while the
+      sign-off is unsigned, or while `GATE.md` still says it is a draft).
     - In the course repo: commit and push `fall-2026/shubham-b/js2-loop-tools-diff`.
     - Canvas: upload `Bagwe_Shubham_INFO7375_JS2.zip`; paste the GitHub folder link, the final
       commit hash the script printed, and the run commands from `README.md`.

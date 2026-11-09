@@ -17,8 +17,9 @@ is yet "checked by Shubham".
 | Wrong versions W1–W9 are caught (§8) | `tests/meta/test_js2_wrong_versions_caught.py` | each killed by its named test |
 | Ashby mapping and UUID IDs (§9) | `tests/providers/test_ashby.py` (20 cases), `test_second_run_new_postings_with_deferred_judgments_is_ok` | pass |
 | Floor (A2) | `tests/watch/test_floor.py` (7 cases; red on `affcbdd`, green on `8259d8b`) | pass |
-| Independent check works on the real runs | `tests/test_check_watch.py` | pass |
-| Whole suite | `uv run pytest -q` | 1083 passed (after the patch) |
+| Independent check works on the real runs, and fails an agent that wrongly fails a good board | `tests/test_check_watch.py` | pass |
+| Plan ceilings, résumé read, reset token (A3) | `tests/watch/test_plan_policy.py` B21–B27 | 8 cases pass (`docs/js2/evidence/boundary-tests-a3.txt`) |
+| Whole suite | `uv run pytest -q` | 1083 passed after the patch; 1092 after the review fixes |
 
 Candidates for "Checked … by a test I wrote before reading Claude's code": none yet. Every test
 above was written by Claude. If Shubham writes or rewrites a test himself before reading the

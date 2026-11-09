@@ -14,17 +14,18 @@ code.
 
 | Deliverable | Where |
 |---|---|
-| The gate: exits, budgets, repeat rule, error policy, permission policy, wrong versions | [`GATE.md`](GATE.md) (v0.1 + amendments A1, A2) |
+| The gate: exits, budgets, repeat rule, error policy, permission policy, wrong versions | [`GATE.md`](GATE.md) (v0.1 + amendments A1, A2, A3) |
 | The loop | [`src/job_search_agent/watch.py`](src/job_search_agent/watch.py), plan [`config/watch.toml`](config/watch.toml) |
 | The permission policy in code | [`src/job_search_agent/policy.py`](src/job_search_agent/policy.py) |
 | The second job system | [`src/job_search_agent/providers/ashby.py`](src/job_search_agent/providers/ashby.py) |
 | Agent trace of a real run, with the deliberate failure | [`docs/js2/TRACE.md`](docs/js2/TRACE.md) → `data/watch/loops/2026-11-09T08-14-22Z/trace.jsonl` |
 | A finished wrong answer and the independent check | [`docs/js2/FINISHED_WRONG.md`](docs/js2/FINISHED_WRONG.md), [`checks/check_watch.py`](checks/check_watch.py) |
-| Permission policy and boundary-test table (B01–B20) | [`docs/js2/POLICY.md`](docs/js2/POLICY.md) |
+| Permission policy and boundary-test table (B01–B27) | [`docs/js2/POLICY.md`](docs/js2/POLICY.md) |
 | The review packet | [`docs/js2/review/REVIEW_PACKET.md`](docs/js2/review/REVIEW_PACKET.md) |
 | Saved raw responses | `data/watch/boards/*/live/runs/*/raw/` (byte for byte, with SHA-256 in `.meta.json`) |
 | Sign-off and driver's seat | [below](#sign-off--job-search-agent-2) |
 | Sources, Frictional | [`SOURCES.md`](SOURCES.md), [`FRICTIONAL.md`](FRICTIONAL.md) |
+| Independent review of this work, and the fixes | [`docs/js2/REVIEW_BY_AGENT.md`](docs/js2/REVIEW_BY_AGENT.md) |
 
 ## Language and toolchain
 
@@ -41,7 +42,7 @@ code.
 
 ```bash
 uv sync                                   # create .venv from uv.lock
-uv run pytest -q                          # full suite, offline (network blocked in tests); 1083 passed
+uv run pytest -q                          # full suite, offline (network blocked in tests); 1092 passed
 uv run ruff check . && uv run mypy src    # lint and strict types
 
 uv run jsa watch run                      # the loop over config/watch.toml (live; ~11 MB of downloads)
@@ -107,10 +108,10 @@ Signed or withheld: ____________ (name, date)
 
 ## Driver's seat — Job-Search Agent 2
 
-The "what Claude did" and evidence columns are facts from this build. The last column is mine
-to write.
+The "what Claude did" and evidence columns are facts from this build. The "what I should do"
+column is Claude's draft for Shubham to edit; the last column is his to write.
 
-| Part | What Claude should do (and did) | What I should do | Evidence | Why that part stays mine |
+| Part | What Claude should do (and did) | What I should do (Claude's draft; Shubham edits) | Evidence | Why that part stays mine |
 |---|---|---|---|---|
 | The loop's exits and budgets | Draft `GATE.md` from my contract; implement the exits, budgets and repeat rule exactly as written; flag when the code cannot do what the gate says (it did: amendment A1) | Decide what counts as finished, the budget numbers, and who may change them; adopt or change the gate | `f524c91` (gate before code), `0afcf05`, `e955298` (A1) | [Shubham] |
 | The error policy and the deliberate failure | Implement retry-once-for-transient; run the loop with a bad board name and show no value was invented | Decide which failures deserve a retry and which must escalate to me; read the trace | `docs/js2/TRACE.md`, events 18–22 | [Shubham] |

@@ -12,8 +12,12 @@ cd "$repo"
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "refusing: commit or discard local changes first" >&2; exit 1
 fi
-if grep -q "Signed or withheld: ____" README.md || grep -q "\[Shubham" README.md FRICTIONAL.md; then
-  echo "refusing: README.md or FRICTIONAL.md still has [Shubham ...] placeholders or an unsigned sign-off" >&2
+# The two excluded files quote the placeholder marker while describing it.
+if grep -q "Signed or withheld: ____" README.md \
+  || grep -q "Until then it is a draft" GATE.md \
+  || grep -rq --exclude=REVIEW_BY_AGENT.md --exclude=FOR_SHUBHAM.md "\[Shubham" \
+       README.md FRICTIONAL.md SOURCES.md GATE.md docs/js2; then
+  echo "refusing: a [Shubham ...] placeholder, an unsigned sign-off or an unadopted GATE.md remains" >&2
   exit 1
 fi
 

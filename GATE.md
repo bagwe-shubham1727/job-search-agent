@@ -191,7 +191,7 @@ boards redirects. Drafted by Claude while designing the fetcher; for Shubham to 
 
 **A2 (2026-11-09, after the finished-wrong-answer runs `2026-11-09T08-16-13Z` and
 `2026-11-09T08-16-16Z`, before the test and the patch).** A planned board may carry
-`min_postings`, a floor written by Shubham from the company's careers page (the same numbers
+`min_postings`, a floor written by Shubham [corrected in A3 item 6: drafted by Claude, for Shubham to confirm] from the company's careers page (the same numbers
 as `checks/expectations.toml`). When a board's response parses but lists fewer postings than
 its floor, the board is a **failed board**: its JS1 run is `INVALID_RESPONSE` with the code
 `below_floor`, its state is not written, its saved response is kept, and the loop cannot end
