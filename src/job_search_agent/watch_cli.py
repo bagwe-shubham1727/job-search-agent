@@ -16,19 +16,20 @@ from pathlib import Path
 from typing import Any, Final
 
 from job_search_agent.clock import SystemClock
-from job_search_agent.config import ConfigOverrides, load_config
+from job_search_agent.config import AgentConfig, ConfigOverrides, load_config
 from job_search_agent.errors import ConfigError
 from job_search_agent.models import ExitCode
 from job_search_agent.pipeline import RunDeps
+from job_search_agent.policy import PermissionPolicy
 from job_search_agent.sysio import SubprocessGit, SubprocessRunner
 from job_search_agent.watch import (
     DEFAULT_PLAN_PATH,
     LoopDeps,
     LoopExit,
+    WatchPlan,
     board_key,
-    build_policy,
     key_text,
-    load_plan,
+    load_checked_plan,
     render_report,
     reset_board,
     run_loop,
@@ -45,14 +46,11 @@ EXIT_CODES: Final = {
 }
 
 
-def _plan_and_policy(args: argparse.Namespace) -> tuple[Any, Any, Any]:
+def _plan_and_policy(
+    args: argparse.Namespace,
+) -> tuple[AgentConfig, WatchPlan, PermissionPolicy]:
     cfg = load_config(args.config, overrides=ConfigOverrides())
-    plan_path: Path = args.plan
-    plan = load_plan(plan_path)
-    policy = build_policy(plan, cfg.project_root)
-    verdict = policy.check_read(plan_path.resolve())
-    if not verdict.allowed:
-        raise ConfigError(f"policy refused reading the plan: {verdict.reason}")
+    plan, policy = load_checked_plan(args.plan, cfg.project_root)
     return cfg, plan, policy
 
 

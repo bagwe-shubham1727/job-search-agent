@@ -16,6 +16,7 @@ from job_search_agent.events import EventLog
 from job_search_agent.evidence_validator import validate_rule_evidence
 from job_search_agent.fsio import ReadPolicy, create_output_root
 from job_search_agent.pipeline import RunDeps
+from job_search_agent.policy import PermissionPolicy
 from job_search_agent.providers import get_provider
 from job_search_agent.resume import load_verified_resume
 from job_search_agent.rule.verdict import evaluate
@@ -125,6 +126,10 @@ class Project:
                 "boards": [{"provider": p, "token": t} for p, t in boards],
             }
         )
+
+    def policy(self) -> PermissionPolicy:
+        """The policy of a default plan for this project."""
+        return build_policy(self.plan([("greenhouse", "stripe")]), self.root)
 
     def board_deps(self, cfg: AgentConfig) -> RunDeps:
         read = ReadPolicy(cfg.project_root).read_bytes

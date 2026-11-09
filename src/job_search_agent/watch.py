@@ -41,7 +41,15 @@ from job_search_agent.models import (
     RunStatus,
 )
 from job_search_agent.pipeline import NOTE_JUDGE_UNAVAILABLE, RunDeps, run_once
-from job_search_agent.policy import Approver, PermissionPolicy, Verdict, settle
+from job_search_agent.policy import (
+    HOST_CEILING,
+    WRITE_CEILING,
+    Approver,
+    PermissionPolicy,
+    Verdict,
+    inside,
+    settle,
+)
 from job_search_agent.ports import BoardProvider, Clock, EventSink, HttpFetcher
 from job_search_agent.providers import get_provider
 from job_search_agent.sources import LiveSource, sha256_hex
@@ -163,12 +171,58 @@ def board_dir_name(key: tuple[str, str]) -> str:
 
 
 def build_policy(plan: WatchPlan, project_root: Path) -> PermissionPolicy:
-    """Builds the permission policy from the plan's ``[policy]`` section."""
+    """Builds the permission policy from the plan, inside the code's ceilings (GATE §6).
+
+    A plan may narrow the hosts and the write folder, never widen them: the ceilings
+    are constants in ``policy``, so a plan file cannot grant itself more.
+
+    Raises:
+        ConfigError: A host outside ``HOST_CEILING``, or a write root outside
+            ``WRITE_CEILING``.
+    """
+    extra = sorted(set(plan.policy.allowed_hosts) - HOST_CEILING)
+    if extra:
+        raise ConfigError(f"plan allows hosts outside GATE §6: {', '.join(extra)}")
+    write_root = project_root / plan.policy.write_root
+    if not inside(write_root, project_root / WRITE_CEILING):
+        raise ConfigError(f"plan write_root must be inside {WRITE_CEILING}")
     return PermissionPolicy(
         project_root=project_root,
-        write_root=project_root / plan.policy.write_root,
+        write_root=write_root,
         allowed_hosts=plan.policy.allowed_hosts,
     )
+
+
+def load_checked_plan(
+    path: Path, project_root: Path
+) -> tuple[WatchPlan, PermissionPolicy]:
+    """Reads a plan only if the ceiling policy allows it, then builds its policy.
+
+    The plan must be readable (not private, inside the project) and must not lie in a
+    folder the agent can write, so the agent cannot rewrite its own plan.
+
+    Args:
+        path: The plan file.
+        project_root: The project root.
+
+    Returns:
+        The plan and its permission policy.
+
+    Raises:
+        ConfigError: The plan is refused, invalid, or asks for more than the ceilings.
+    """
+    ceiling = PermissionPolicy(
+        project_root=project_root,
+        write_root=project_root / WRITE_CEILING,
+        allowed_hosts=HOST_CEILING,
+    )
+    read = ceiling.check_read(path.resolve())
+    if not read.allowed:
+        raise ConfigError(f"policy refused reading the plan: {read.reason}")
+    if ceiling.check_write(path.resolve()).allowed:
+        raise ConfigError("the plan must not live where the agent can write")
+    plan = load_plan(path)
+    return plan, build_policy(plan, project_root)
 
 
 # --- budget and the fetcher ---------------------------------------------------
@@ -681,6 +735,9 @@ class _Loop:
         return outcome
 
     def run(self) -> tuple[LoopExit, str]:
+        resume = self.d.policy.check_read(self.d.base_config.resume_path)
+        if not resume.allowed:
+            return LoopExit.ERROR, f"resume_read_refused:{resume.reason}"
         planned = self.plan_boards()
         if isinstance(planned, str):
             return LoopExit.ERROR, planned
@@ -730,7 +787,7 @@ def run_loop(deps: LoopDeps) -> LoopReport:
 
     Raises:
         RunLocked: Another loop or reset holds ``data/watch/.lock``.
-        PathRejected: The write root refuses the loop folder.
+        ConfigError: The policy refuses the loop folder.
     """
     write = deps.policy.check_write(deps.policy.write_root / "loops")
     if not write.allowed:
@@ -848,9 +905,13 @@ def reset_board(
         The settled verdict, and whether a state file was deleted.
 
     Raises:
+        ConfigError: Unknown provider or an unsafe token (nothing is asked).
         RunLocked: A loop is running.
     """
     key = board_key(provider, token)
+    get_provider(key[0]).jobs_url(
+        key[1]
+    )  # same token check as the plan: no "/" or ".."
     state = policy.write_root / "boards" / board_dir_name(key) / "live" / "state.json"
     question = (
         f"Delete the saved state of {key_text(key)}? Its next run becomes a fresh "

@@ -31,6 +31,12 @@ NEVER_ACTIONS: Final = frozenset({"apply", "email", "message", "login"})
 TOOLS: Final = frozenset({"fetch", "read", "write", "delete"})
 """The only actions the agent has; each one still passes its own check."""
 
+HOST_CEILING: Final = frozenset({"boards-api.greenhouse.io", "api.ashbyhq.com"})
+"""GATE §6: the only hosts a plan may allow; widening it is a reviewed code change."""
+
+WRITE_CEILING: Final = "data/watch"
+"""GATE §6: every plan's write root must be this folder or inside it."""
+
 PRIVATE_DIRS: Final = ("private",)
 """Top-level folders that hold the real résumé and other personal files."""
 
