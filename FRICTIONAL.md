@@ -1,5 +1,24 @@
 # FRICTIONAL.md — Where the Build Pushed Back
 
+## Job-Search Agent 2
+
+**Student:** Shubham Bagwe
+**Written:** [Shubham: date]
+
+> **Not written yet.** This part is mine to write (course AI policy: Claude must not invent my
+> struggle or understanding). Claude left the facts I can draw on in
+> [`docs/js2/BUILD_LOG.md`](docs/js2/BUILD_LOG.md), with commits. Candidate episodes, if they
+> match what I actually checked or decided: the overnight hand-off itself and what I re-checked
+> in the morning; the two boards that answer 200 and are wrong (`greenhouse/ramp`,
+> `ashby/vercel`); Ashby's UUID IDs against the JS1 decimal-ID rule; amendment A1 (what counts
+> as a request); my accept/revise/reject decision on the A2 patch; Claude's two process
+> mistakes (a red test committed through a pipe, a wrong commit grouping). For each: what
+> happened, what I checked or changed, what I accepted, modified or rejected from Claude, what
+> is unresolved, and the commit or test that shows it.
+
+## Job-Search Agent 1
+
+
 **Student:** Shubham Bagwe  
 **Written:** October 31, 2026
 

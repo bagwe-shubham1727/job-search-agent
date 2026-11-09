@@ -1,8 +1,63 @@
 # Sources
 
+## Job-Search Agent 2 — the loop, the tools, and the diff
+
+**Started from:** my own Job-Search Agent 1 (this repository, through commit `4b6c80f`). I did
+not use the Reallocation Engine or Lectern code. The dated record for JS2 is
+[`docs/js2/BUILD_LOG.md`](docs/js2/BUILD_LOG.md).
+
+### External sources (JS2)
+
+| Source | Used for |
+|---|---|
+| [JS2 assignment](https://github.com/nikbearbrown/info-7375-prompt-engineering-for-generative-ai/blob/main/assignments/assignment-js2-the-loop-the-tools-and-the-diff.md) and the course AI policy | The requirements |
+| Greenhouse Job Board API: `boards-api.greenhouse.io/v1/boards/{stripe,figma,ramp}/jobs?content=true` | Job data. Raw responses are saved byte for byte under `data/watch/boards/*/live/runs/*/raw/` |
+| Ashby posting API: `api.ashbyhq.com/posting-api/job-board/{ramp,linear,linearapp}` | Job data, and the deliberate 404 (`linearapp`) |
+| `ramp.com/careers`, `stripe.com/jobs/search`, `figma.com/careers`, `linear.app/careers`, read 2026-11-09 outside the agent | Which job system each company links to, for `checks/expectations.toml` |
+| Python libraries: as in JS1 (`httpx`, `pydantic`; `pytest`, `ruff`, `mypy`; `uv`). No new dependency | Toolchain |
+
+No model call was made by the JS2 loop. I did not copy code from other projects or classmates.
+
+### What I wrote (JS2)
+
+[Shubham: list what you wrote or changed yourself, with commits: for example your edits to
+`GATE.md` when you adopted it, your review decision in `docs/js2/review/REVIEW_PACKET.md`, the
+commands you ran yourself, the sign-off, the driver's-seat "why" column, and `FRICTIONAL.md`.]
+
+### What Claude contributed (JS2)
+
+Claude Code (Opus 5.5), in one overnight session on 2026-11-09 while I was away, at my request
+to plan and do the whole assignment:
+
+- **Probing and board choice.** Claude probed Greenhouse, Ashby and Lever boards, chose the four
+  real boards and the deliberate bad name, and found the two wrong-but-200 boards
+  (`ashby/vercel` empty, `greenhouse/ramp` stale).
+- **`GATE.md`.** Claude drafted v0.1 from my `CONTRACT.md` and committed it before any JS2 code
+  (`f524c91`), and drafted amendments A1 and A2. [Shubham: say whether you adopted them as
+  written or changed them, and in which commit.]
+- **Code and tests.** Claude wrote `providers/ashby.py`, `policy.py`, `watch.py`,
+  `watch_cli.py`, the UUID-ID and exit-code changes in `models.py`, the shared-helper renames in
+  `providers/greenhouse.py`, the tests in `tests/watch/` and `tests/providers/test_ashby.py`, the
+  wrong versions W1–W9 (`tests/wrong_versions/js2.py`) and their meta-test, and the independent
+  check `checks/check_watch.py` with `checks/expectations.toml`.
+- **The reviewed change.** Claude wrote the A2 test (`affcbdd`) before the patch. A separate,
+  fresh Claude Code subagent wrote the patch from the request in
+  `docs/js2/review/PROMPT.md`. The orchestrating Claude session read the diff and recorded the
+  evidence in `docs/js2/review/REVIEW_PACKET.md`. The accept/revise/reject decision there is
+  mine.
+- **Runs.** Claude ran the live loop runs and the wrong-board runs recorded in
+  `docs/js2/TRACE.md` and `docs/js2/FINISHED_WRONG.md`, and the boundary tests in
+  `docs/js2/evidence/boundary-tests.txt`.
+- **Docs.** Claude drafted `README.md`, `docs/js2/*.md` and the facts for the sign-off. The
+  sign-off itself, the driver's-seat reasons and `FRICTIONAL.md` are mine.
+- **Review.** A fresh Claude reviewer agent checked code quality and the assignment fit at the
+  end; its report is `docs/js2/REVIEW_BY_AGENT.md`.
+
+## Job-Search Agent 1 — the contract and the watch
+
 What this submission used, what I wrote, and what Claude contributed. The day-by-day record, with commit hashes, is [`docs/BUILD_LOG.md`](docs/BUILD_LOG.md).
 
-## External sources
+### External sources
 
 | Source | Used for |
 |---|---|
@@ -15,7 +70,7 @@ What this submission used, what I wrote, and what Claude contributed. The day-by
 
 I did not copy code from other projects.
 
-## What I wrote
+### What I wrote
 
 - **`CONTRACT.md` (commits `053fda0`, `c1bd530`, `7aa5d0f`):** I chose the target role families, level targets, skill categories, the switch to Stripe on Greenhouse, and the hard US-only location rule after inspecting the initial hand-check candidates (including evaluating `8249901`, `7543868`, `8175099`, and `8234357`). I edited the contract text across drafts.
 - **Chapter 1 (`experiments/sampling/hand_labels.json`, `data/experiments/sampling/SAMPLING.tables.md`, `docs/experiments/SAMPLING.md`):** I confirmed the five `CONTRACT.md` §13 hand labels (`f5fb431`), supplied the pre-run prediction before `jsa exp sampling run` executed, and wrote the `## Conclusion` section, updating it after Claude Code verified the 20-call reasons on `8234357` and `8127182`.
@@ -23,7 +78,7 @@ I did not copy code from other projects.
 - **Chapter 3 (`data/experiments/surfaces/ACTION_SURFACES.tables.md`, `docs/experiments/ACTION_SURFACES.md`):** I wrote the three `What could go wrong` risk cells and the `## Least autonomy that suffices` defense selecting Surface (a) (`--tools ""`).
 - **`FRICTIONAL.md`, README.md sign-off and driver's-seat table, and SOURCES.md student sections:** I wrote these student-owned sections. I used `docs/BUILD_LOG.md` and `docs/FACTS_FOR_SIGNOFF.md` to trace timestamps, commit hashes, and run counts; Claude assisted with fact-checking against repository artifacts.
 
-## What Claude contributed
+### What Claude contributed
 
 Claude Code (Opus 5.5 orchestrating; coding agents in separate worktrees) contributed:
 
@@ -38,7 +93,7 @@ Claude Code (Opus 5.5 orchestrating; coding agents in separate worktrees) contri
 - **Prompt v2 lists.** At my direction, Claude copied the lists from `CONTRACT.md` §6 into `label_definition` in `prompts/judge.v2.md`, replacing examples in my draft that came from held-out postings.
 - **Generated docs.** Code generated the tables in the three experiment docs. Claude drafted `README.md` except for the sign-off and driver's-seat sections, and drafted `docs/NETWORK.md`, `TRACEABILITY.md`, `ARCHITECTURE.md`, `RUNS.md`, `FACTS_FOR_SIGNOFF.md`, and `BUILD_LOG.md`. I reviewed and edited the student-owned material.
 
-## AI assistance in my own parts
+### AI assistance in my own parts
 
 - **Contract review and §6.4 / §13 data extraction (`CONTRACT.md`, Oct 29):** As recorded in `docs/BUILD_LOG.md` (18:10–19:15 ET), Claude reviewed my contract drafts, converted my US-only location requirement into finite US and non-US signal lists across the 294 distinct `location.name` strings in the October 29 Stripe response (§6.4), computed skill path lists for the §13 hand-check postings, and identified `8127182` as the fewer-than-two-skills hand-check case. I made the policy decisions and edited the contract.
 - **Chapter 2 hand-label JSON formatting (`dev.labels.json`, `heldout.labels.json`):** I decided each of the 20 labels by applying the §6 criteria. Claude did **not** decide or assign the labels; Claude only formatted my decisions as JSON and helped format the associated notes (`14e51f9`). Before freezing `judge.v2.md` (`c2e5599`), Claude checked the v2 text against `CONTRACT.md` §6, flagged that several examples came from held-out postings, and replaced those examples with the full contract lists at my direction so the held-out set stayed clean. The earlier v2 draft's held-out-example exposure remains an experiment limitation and is disclosed in `docs/experiments/PROMPT_EXPERIMENT.md`.
