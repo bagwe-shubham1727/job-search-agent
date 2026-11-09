@@ -1,0 +1,26 @@
+# What a person knows about each company without asking the agent. checks/check_watch.py
+# compares every loop run with this file; the agent itself never reads it.
+#
+# Recorded by Claude on 2026-11-09 from each company's own careers page, fetched outside the
+# agent: `system` is the job system the page links to (ramp.com/careers mentions
+# "ashbyhq" 338 times and "greenhouse" 0 times; stripe.com/jobs/search and
+# figma.com/careers mention greenhouse; linear.app/careers mentions ashbyhq), and
+# `min_postings` is a floor a person would be surprised to see the real board fall below,
+# roughly an order of magnitude under that day's count (Stripe 768, Figma 144, Ramp 169,
+# Linear 32). Shubham confirms each line by opening the careers page himself.
+
+[companies.stripe]
+system = "greenhouse"
+min_postings = 100
+
+[companies.figma]
+system = "greenhouse"
+min_postings = 20
+
+[companies.ramp]
+system = "ashby"
+min_postings = 20
+
+[companies.linear]
+system = "ashby"
+min_postings = 5

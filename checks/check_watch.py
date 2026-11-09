@@ -1,0 +1,169 @@
+"""Independent check of one watch-loop run (the finished-wrong-answer check).
+
+It does not trust, or import, the agent. It reads the files a loop run left behind (the
+loop report, the trace, each board's run report, raw response and prior state) with
+the standard library only, recomputes what it can from the raw bytes, and compares the
+result with the agent's report and with ``checks/expectations.toml``: what a person
+knows about each company without the agent.
+
+Usage::
+
+    uv run python checks/check_watch.py data/watch/loops/<loop_id>
+
+Exit status 0 when every check passes, 1 otherwise. Output is one Markdown table.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import sys
+import tomllib
+from pathlib import Path
+from typing import Any
+
+PROJECT = Path(__file__).resolve().parents[1]
+OK_BOARD = "OK"
+ATTEMPTED = ("OK", "FAILED")
+
+
+def _json(path: Path) -> Any:  # noqa: ANN401 - arbitrary JSON document
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _trace(loop_dir: Path) -> list[dict[str, Any]]:
+    lines = (loop_dir / "trace.jsonl").read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines]
+
+
+def _ids(raw: Any) -> set[str] | None:  # noqa: ANN401
+    """Posting IDs in a board response, or ``None`` if it is not a jobs object."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("jobs"), list):
+        return None
+    return {str(job["id"]) for job in raw["jobs"] if isinstance(job, dict) and "id" in job}
+
+
+def check_board(
+    board: dict[str, Any], trace: list[dict[str, Any]], expect: dict[str, Any]
+) -> list[tuple[str, bool, str]]:
+    """Checks one attempted board; returns ``(check, passed, detail)`` rows."""
+    rows: list[tuple[str, bool, str]] = []
+    run_dir = PROJECT / board["run_folder"]
+    run = _json(run_dir / "report.json")
+    raw_ref = run.get("raw_evidence")
+    results = [
+        e for e in trace if e["event"] == "tool.fetch.result" and e["board"] == board["board"]
+    ]
+    if raw_ref is None:
+        rows.append(("raw saved", board["state"] != OK_BOARD, "no raw response saved"))
+        return rows
+    body = (PROJECT / raw_ref["path"]).read_bytes()
+    digest = hashlib.sha256(body).hexdigest()
+    same = digest == raw_ref["sha256"] == (results[-1]["sha256"] if results else None)
+    rows.append(("sha256 raw = report = trace", same, digest[:12]))
+    try:
+        ids = _ids(json.loads(body))
+    except ValueError:
+        ids = None
+    if ids is None:
+        claims = board["fetched_count"] is not None
+        rows.append(("no count invented", not claims, "raw is not a jobs object"))
+        return rows
+    rows.append(
+        (
+            "count = raw jobs",
+            board["fetched_count"] == len(ids),
+            f"raw {len(ids)}, report {board['fetched_count']}",
+        )
+    )
+    before = _json(run_dir / "state.before.json")
+    if board["state"] == OK_BOARD and before is not None:
+        new = len(ids - set(before["seen_ids"]))
+        rows.append(
+            ("new = raw - before", board["new_count"] == new, f"recomputed {new}")
+        )
+    company = expect.get(board["board"].split("/", 1)[1])
+    if company is None:
+        rows.append(("expected", False, "no expectation written for this company"))
+        return rows
+    system = board["board"].split("/", 1)[0]
+    rows.append(
+        (
+            "careers page uses this system",
+            system == company["system"],
+            f"board {system}, careers page {company['system']}",
+        )
+    )
+    floor = company["min_postings"]
+    rows.append(
+        ("at least the expected floor", len(ids) >= floor, f"{len(ids)} vs {floor}")
+    )
+    return rows
+
+
+def check_loop(loop_dir: Path, expectations: Path) -> list[tuple[str, str, bool, str]]:
+    """Every check for one loop run, as ``(board, check, passed, detail)`` rows."""
+    report = _json(loop_dir / "report.json")
+    trace = _trace(loop_dir)
+    expect = tomllib.loads(expectations.read_text(encoding="utf-8"))["companies"]
+    rows: list[tuple[str, str, bool, str]] = []
+    planned = trace[0]["planned"]
+    reported = [b["board"] for b in report["boards"]]
+    rows.append(
+        (
+            "(loop)",
+            "every planned board reported",
+            len(planned) == len(reported),
+            f"{len(planned)} planned, {len(reported)} reported",
+        )
+    )
+    attempts = sum(e["event"] == "tool.fetch.attempt" for e in trace)
+    rows.append(
+        (
+            "(loop)",
+            "requests = trace attempts <= budget",
+            attempts == report["requests_used"] <= report["budget"]["max_requests"],
+            f"{attempts} attempts",
+        )
+    )
+    board_rows: list[tuple[str, str, bool, str]] = []
+    for board in report["boards"]:
+        if board["state"] in ATTEMPTED:
+            for check, passed, detail in check_board(board, trace, expect):
+                board_rows.append((board["board"], check, passed, detail))
+    all_ok = all(b["state"] in (OK_BOARD, "SKIPPED_REPEAT") for b in report["boards"])
+    checks_ok = all(passed for _, _, passed, _ in board_rows)
+    finished = report["exit"] == "FINISHED"
+    rows.append(
+        (
+            "(loop)",
+            "FINISHED only if every board is OK and checks out",
+            not finished or (all_ok and checks_ok),
+            f"agent says {report['exit']}",
+        )
+    )
+    return rows + board_rows
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Prints the table; returns 0 only if every check passes."""
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("loop_dir", type=Path)
+    parser.add_argument(
+        "--expectations", type=Path, default=PROJECT / "checks" / "expectations.toml"
+    )
+    args = parser.parse_args(argv)
+    rows = check_loop(args.loop_dir, args.expectations)
+    print(f"Independent check of {args.loop_dir.as_posix()}\n")
+    print("| board | check | result | detail |")
+    print("|---|---|---|---|")
+    for board, check, passed, detail in rows:
+        print(f"| {board} | {check} | {'PASS' if passed else 'FAIL'} | {detail} |")
+    failed = sum(not passed for _, _, passed, _ in rows)
+    print(f"\n{len(rows) - failed} passed, {failed} failed.")
+    return 0 if failed == 0 else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
