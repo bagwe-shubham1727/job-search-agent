@@ -20,3 +20,4 @@ write_root = "data/watch"
 [[boards]]
 provider = "greenhouse"
 token = "ramp"
+min_postings = 20

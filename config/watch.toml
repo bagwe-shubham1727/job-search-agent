@@ -21,18 +21,22 @@ write_root = "data/watch"
 [[boards]]
 provider = "greenhouse"
 token = "stripe"
+min_postings = 100
 
 [[boards]]
 provider = "greenhouse"
 token = "figma"
+min_postings = 20
 
 [[boards]]
 provider = "ashby"
 token = "ramp"
+min_postings = 20
 
 [[boards]]
 provider = "ashby"
 token = "linear"
+min_postings = 5
 
 # Deliberate failure (GATE §5): Linear's Ashby board is "linear", not "linearapp".
 [[boards]]
