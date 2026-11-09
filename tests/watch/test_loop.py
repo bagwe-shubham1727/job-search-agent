@@ -269,7 +269,7 @@ def test_bad_board_name_is_not_retried_and_loop_is_incomplete(p: Project) -> Non
     )
     assert not p.state("ashby-linearapp").exists()
     assert (
-        "`ashby/linearapp`: FAILED FETCH_FAILED"
+        "`ashby/linearapp`: FAILED, FETCH_FAILED, HTTP 404, HTTP_STATUS, 1 request(s)"
         in (p.loop_dir(report) / "report.md").read_text()
     )
     assert p.sleeps == []
