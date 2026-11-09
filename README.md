@@ -1,4 +1,127 @@
-# Job-Search Agent 1 — The Contract and the Watch
+# Job-Search Agent 2 — The Loop, the Tools, and the Diff
+
+**Student:** Shubham Bagwe · **Course:** INFO 7375 — Prompt Engineering for Generative AI (Northeastern University) · **Instructor:** Nik Bear Brown · **Assignment:** JS2, due 2026-11-10
+
+The JS1 agent watched one board. This layer runs it as a **bounded loop over several boards on
+two job systems** (Greenhouse and Ashby), with a budget, one exit status per run, a trace of
+every observation, a **permission policy enforced in code**, and one change made by Claude Code
+and reviewed on evidence. It is still discovery only: the agent never applies, emails, messages
+or logs in. The résumé is still the fictional persona Kiran Joshi.
+
+**Started from:** my own JS1 agent (this repository through `4b6c80f`), not the Reallocation
+Engine or Lectern. **Start here:** [`GATE.md`](GATE.md), committed in `f524c91` before any JS2
+code.
+
+| Deliverable | Where |
+|---|---|
+| The gate: exits, budgets, repeat rule, error policy, permission policy, wrong versions | [`GATE.md`](GATE.md) (v0.1 + amendments A1, A2) |
+| The loop | [`src/job_search_agent/watch.py`](src/job_search_agent/watch.py), plan [`config/watch.toml`](config/watch.toml) |
+| The permission policy in code | [`src/job_search_agent/policy.py`](src/job_search_agent/policy.py) |
+| The second job system | [`src/job_search_agent/providers/ashby.py`](src/job_search_agent/providers/ashby.py) |
+| Agent trace of a real run, with the deliberate failure | [`docs/js2/TRACE.md`](docs/js2/TRACE.md) → `data/watch/loops/2026-11-09T08-14-22Z/trace.jsonl` |
+| A finished wrong answer and the independent check | [`docs/js2/FINISHED_WRONG.md`](docs/js2/FINISHED_WRONG.md), [`checks/check_watch.py`](checks/check_watch.py) |
+| Permission policy and boundary-test table (B01–B20) | [`docs/js2/POLICY.md`](docs/js2/POLICY.md) |
+| The review packet | [`docs/js2/review/REVIEW_PACKET.md`](docs/js2/review/REVIEW_PACKET.md) |
+| Saved raw responses | `data/watch/boards/*/live/runs/*/raw/` (byte for byte, with SHA-256 in `.meta.json`) |
+| Sign-off and driver's seat | [below](#sign-off--job-search-agent-2) |
+| Sources, Frictional | [`SOURCES.md`](SOURCES.md), [`FRICTIONAL.md`](FRICTIONAL.md) |
+
+## Language and toolchain
+
+| | |
+|---|---|
+| Language | Python ≥ 3.12 (run on 3.14.5) |
+| Package manager | `uv` 0.11.0; dependencies pinned in `uv.lock` |
+| Runtime libraries | `httpx`, `pydantic` (no new dependency in JS2) |
+| Dev tools | `pytest`, `ruff`, `mypy --strict` |
+| Model | None in the JS2 loop (backend `none`). JS1's `jsa run` still uses `claude-sonnet-5-5` through the `claude` CLI |
+| Platform | macOS (darwin); nothing is macOS-specific |
+
+## Commands (from a fresh clone)
+
+```bash
+uv sync                                   # create .venv from uv.lock
+uv run pytest -q                          # full suite, offline (network blocked in tests); 1083 passed
+uv run ruff check . && uv run mypy src    # lint and strict types
+
+uv run jsa watch run                      # the loop over config/watch.toml (live; ~11 MB of downloads)
+uv run jsa watch run --plan config/watch-wrong-board.toml    # the finished-wrong-answer plan
+uv run python checks/check_watch.py data/watch/loops/<loop_id>   # the independent check
+uv run jsa watch reset greenhouse/ramp    # the one write that needs approval: asks at a terminal
+uv run jsa audit-privacy data/watch       # résumé values, credentials, absolute paths in outputs
+```
+
+`jsa watch run` exits 0 `FINISHED`, 8 `INCOMPLETE`, 9 `BUDGET_EXHAUSTED`, 10 `ERROR` (GATE §2).
+It writes only under `data/watch/`: the loop's `trace.jsonl`, `report.json` and `report.md` in
+`data/watch/loops/<loop_id>/`, and each board's JS1 run folder and state in
+`data/watch/boards/<provider>-<token>/live/`. A run from a fresh clone continues from the
+committed state, so its boards are no longer baselines; the write folder is fixed by the plan's
+`[policy]` section.
+
+The wrong-version meta-test (`tests/meta/test_js2_wrong_versions_caught.py`) runs `tests/watch`
+once per wrong version W1–W9 in a child pytest and checks that the named test kills each one.
+
+## What ran
+
+All live, on 2026-11-09, run by Claude in one session (times UTC; ET is UTC−5).
+
+| Loop | Plan | Code | Exit | Boards | Requests | Independent check |
+|---|---|---|---|---|---:|---|
+| [`08-14-22Z`](data/watch/loops/2026-11-09T08-14-22Z/report.md) run 1 | `watch.toml` | `e955298` | `INCOMPLETE` (8) | Stripe 768, Figma 144, Ramp 169, Linear 32: `BASELINE`; `ashby/linearapp`: 404, `FETCH_FAILED`, not retried | 5 | 21/21 pass |
+| [`08-16-13Z`](data/watch/loops/2026-11-09T08-16-13Z/report.md) | `watch-wrong-board.toml` | `e54a26d` | `FINISHED` (0) — wrong | `greenhouse/ramp` 1 stale posting, `BASELINE` | 1 | 3 fail |
+| [`08-16-16Z`](data/watch/loops/2026-11-09T08-16-16Z/report.md) | `watch-wrong-board.toml` | `e54a26d` | `FINISHED` (0) — wrong, "no new jobs" | `greenhouse/ramp` `SUCCESS_NO_NEW` | 1 | 3 fail |
+| [`08-23-46Z`](data/watch/loops/2026-11-09T08-23-46Z/report.md) after the patch | `watch-wrong-board.toml` | `8259d8b` | `ERROR` (10) | `greenhouse/ramp` `INVALID_RESPONSE`, `below_floor`; state untouched | 1 | 7/7 pass |
+| [`08-27-13Z`](data/watch/loops/2026-11-09T08-27-13Z/report.md) run 2 | `watch.toml` (with A2 floors) | `127bf82` | `INCOMPLETE` (8) | Stripe 768, Figma 144, Ramp 169, Linear 32: `SUCCESS_NO_NEW`, no floor tripped; `ashby/linearapp`: 404 again | 5 | 25/25 pass |
+
+Not run live: a retry (timeout or 5xx), and a budget stop. Both are shown only by constructed
+tests (`tests/watch/test_loop.py`).
+
+## Repository map (JS2 additions)
+
+| Path | Contents |
+|---|---|
+| `GATE.md` | The gate, written before the code |
+| `config/watch.toml`, `config/watch-wrong-board.toml` | The watch plan; the deliberate wrong-board plan |
+| `src/job_search_agent/{watch,watch_cli,policy}.py`, `providers/ashby.py` | Loop, CLI, policy, Ashby |
+| `tests/watch/` | Loop, budget, retry, repeat, policy boundary and floor tests; harness |
+| `tests/wrong_versions/js2.py`, `tests/meta/test_js2_wrong_versions_caught.py` | W1–W9 and the meta-test |
+| `checks/` | The independent check and the hand expectations it reads |
+| `data/watch/` | Every loop run, every board's runs, raw responses and state |
+| `docs/js2/` | Trace, finished wrong answer, policy, review packet, build log, evidence outputs |
+
+## Sign-off — Job-Search Agent 2
+
+[Shubham: this block is yours to write and sign. Facts you can draw on, with test names and
+evidence files: [`docs/js2/FACTS_FOR_SIGNOFF.md`](docs/js2/FACTS_FOR_SIGNOFF.md). Name only
+tests you ran or wrote yourself under "Checked", and say which parts Claude did under "How".]
+
+```text
+Sign-off — Job-Search Agent 2
+Checked:      [Shubham]
+How:          [Shubham: by hand / by a test I wrote before reading Claude's code /
+              by recomputation / with Claude's help (say which parts)]
+Not checked:  [Shubham: at least three real items; candidates in FACTS_FOR_SIGNOFF.md]
+Not claiming: [Shubham]
+Signed or withheld: ____________ (name, date)
+```
+
+## Driver's seat — Job-Search Agent 2
+
+The "what Claude did" and evidence columns are facts from this build. The last column is mine
+to write.
+
+| Part | What Claude should do (and did) | What I should do | Evidence | Why that part stays mine |
+|---|---|---|---|---|
+| The loop's exits and budgets | Draft `GATE.md` from my contract; implement the exits, budgets and repeat rule exactly as written; flag when the code cannot do what the gate says (it did: amendment A1) | Decide what counts as finished, the budget numbers, and who may change them; adopt or change the gate | `f524c91` (gate before code), `0afcf05`, `e955298` (A1) | [Shubham] |
+| The error policy and the deliberate failure | Implement retry-once-for-transient; run the loop with a bad board name and show no value was invented | Decide which failures deserve a retry and which must escalate to me; read the trace | `docs/js2/TRACE.md`, events 18–22 | [Shubham] |
+| The permission policy | Implement the policy in code; write the boundary predictions before running the tests | Choose the hosts, the write folder, what needs my approval and what is never allowed; approve the one reset | `GATE.md` §6–7, `docs/js2/POLICY.md`, `tests/watch/test_policy.py` | [Shubham] |
+| The finished wrong answer | Find a natural wrong board, run it, write a checker that does not trust the agent | Confirm the careers-page facts and floors by hand | `docs/js2/FINISHED_WRONG.md`, `checks/expectations.toml` | [Shubham] |
+| The review | Write the test before the patch; have a separate session write the patch; read the diff as behaviour; mutate it; recommend | Run the commands myself, read the diff myself, and decide accept, revise or reject | `docs/js2/review/REVIEW_PACKET.md`, `affcbdd` → `8259d8b` | [Shubham] |
+| The sign-off | Collect facts and candidate limits | Decide what I can honestly claim, and sign or withhold | `docs/js2/FACTS_FOR_SIGNOFF.md` | [Shubham] |
+
+---
+
+## Job-Search Agent 1 — The Contract and the Watch (previous layer)
 
 **Student:** Shubham Bagwe · **Course:** INFO 7375 — Prompt Engineering for Generative AI (Northeastern University) · **Instructor:** Nik Bear Brown · **Assignment:** JS1, due 2026-10-31
 
@@ -10,7 +133,7 @@ The résumé is a **fictional persona**, Kiran Joshi ([`persona/kiran-joshi.resu
 
 **Start here:** [`CONTRACT.md`](CONTRACT.md) was written and committed first (`053fda0`, before any code).
 
-## Language and toolchain
+### Language and toolchain
 
 | | |
 |---|---|
@@ -21,7 +144,7 @@ The résumé is a **fictional persona**, Kiran Joshi ([`persona/kiran-joshi.resu
 | Model | `claude-sonnet-5-5` through the `claude` CLI (Claude Code 2.1.314 for every recorded call), signed in with a Claude subscription. No API key is used or needed |
 | Platform | macOS (darwin); nothing is macOS-specific |
 
-## Commands (from a fresh clone)
+### Commands (from a fresh clone)
 
 ```bash
 uv sync                          # create .venv and install pinned dependencies
@@ -51,7 +174,7 @@ Other commands:
 
 A live run needs network access and a signed-in `claude`. Without `claude`, judgments are `UNAVAILABLE` and stay pending; the agent never falls back to an API key.
 
-## What ran
+### What ran
 
 All runs below are real and committed. Full tables: [`docs/RUNS.md`](docs/RUNS.md).
 
@@ -67,7 +190,7 @@ All runs below are real and committed. Full tables: [`docs/RUNS.md`](docs/RUNS.m
 - **Live 3:** no posting was new. The board had shrunk to 745, and the 757 IDs seen so far are kept: a disappeared ID is never forgotten (CONTRACT §10).
 - **Evidence:** raw responses are saved byte for byte with their SHA-256 (`data/live/runs/*/raw/`); state is in `data/live/state.json`. `verify-evidence` passes on every file.
 
-## The three chapter artifacts
+### The three chapter artifacts
 
 | Chapter | Report | Headline |
 |---|---|---|
@@ -75,7 +198,7 @@ All runs below are real and committed. Full tables: [`docs/RUNS.md`](docs/RUNS.m
 | 2. Prompt experiment | [`docs/experiments/PROMPT_EXPERIMENT.md`](docs/experiments/PROMPT_EXPERIMENT.md) | v1 → v2 (only `label_definition` changed): dev 7/10 → 10/10, held-out 6/10 → 10/10 |
 | 3. Action surfaces | [`docs/experiments/ACTION_SURFACES.md`](docs/experiments/ACTION_SURFACES.md) | Chosen: surface (a), stdin with no tools |
 
-## Repository map
+### Repository map
 
 | Path | Contents |
 |---|---|
@@ -92,7 +215,7 @@ All runs below are real and committed. Full tables: [`docs/RUNS.md`](docs/RUNS.m
 
 Left out on purpose: caches, `.venv`, credentials, `data/tmp/`, `data/scratch/`, and my real résumé (it stays in the gitignored `private/`).
 
-## Sign-off
+### Sign-off
 
 Candidate facts for "Not checked" and "Not claiming": [`docs/FACTS_FOR_SIGNOFF.md`](docs/FACTS_FOR_SIGNOFF.md).
 
@@ -113,7 +236,7 @@ Candidate facts for "Not checked" and "Not claiming": [`docs/FACTS_FOR_SIGNOFF.m
   - I am not claiming that a `MATCH` or `RELEVANT` label means Kiran Joshi (or any candidate) is qualified for the job, will pass recruiting screens, or has verified visa sponsorship, nor that the 10-posting cells in Chapter 2 (`10/10 [0.72, 1.00]`) prove a statistically narrow error rate or generalize to unstratified board traffic.
 - **Signed:** Shubham Bagwe — 2026-10-31
 
-## Driver's seat
+### Driver's seat
 
 | Task | What Claude should do / did | What I should do / did | Why that part stays mine | Pointer |
 |---|---|---|---|---|

@@ -36,3 +36,29 @@ Design rules:
 - The rule and Claude never see each other's output.
 - Python owns all network, file and state work. Claude only judges text it is given on stdin, with no tools.
 - A failed fetch or a bad response never overwrites the last good state.
+
+## JS2: the watch loop (`jsa watch run`)
+
+```text
+config/watch.toml ─► watch.load_plan ─► policy.PermissionPolicy (hosts, data/watch/, approvals)
+                         │
+                         ▼ for each planned board, in order (repeat rule, budget check first)
+      watch.LoopFetcher ─ policy.check_request ─ budget ─ one retry if transient ─► http (allow-list)
+                         │
+                         ▼
+      pipeline.run_once (the JS1 pass, unchanged) on data/watch/boards/<provider>-<token>/
+                         │                       provider: greenhouse | ashby (FlooredProvider if A2 floor)
+                         ▼
+      watch.board_ok ─► watch.decide_exit ─► data/watch/loops/<loop_id>/{trace.jsonl,report.json,report.md}
+```
+
+| Module | Job |
+|---|---|
+| `watch` | Plan model, `BudgetMeter`, `LoopFetcher` (policy, budget, repeat, retry), `board_ok`, `decide_exit`, `FlooredProvider`, `run_loop`, `reset_board` |
+| `watch_cli` | `jsa watch run` and `jsa watch reset` (exit codes 8–10) |
+| `policy` | `PermissionPolicy`: `check_request`, `check_read`, `check_write`, `check_delete`, `check_action`; `settle` asks for approval |
+| `providers/ashby` | Ashby posting API; maps fields onto the rule's names (GATE §9) |
+| `checks/check_watch.py` (outside the package) | The independent check; standard library only |
+
+The JS1 pipeline is reused unchanged: each board is one `run_once` with its own data folder and a
+loop fetcher in place of the plain one.
