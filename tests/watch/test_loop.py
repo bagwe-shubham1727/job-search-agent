@@ -238,8 +238,14 @@ def test_request_budget_stops_before_the_next_board(p: Project) -> None:
 def test_request_budget_also_bounds_a_retry(p: Project) -> None:
     plan = p.plan([("greenhouse", "stripe")], max_requests=1)
     report = p.run(plan, {GH.format("stripe"): sequence(status(503))})
+    (board,) = report.boards
     assert report.requests_used == 1
-    assert report.boards[0].requests == 1
+    assert board.requests == 1
+    # The real failure is reported and its response kept, not replaced by the budget.
+    assert (board.http_status, board.fetch_error) == (503, FetchErrorKind.HTTP_STATUS)
+    assert list((p.root / (board.run_folder or "") / "raw").glob("*.json"))
+    skipped = [e for e in p.trace(report) if e["event"] == "tool.fetch.retry_skipped"]
+    assert [e["reason"] for e in skipped] == ["max_requests"]
 
 
 def test_board_budget(p: Project) -> None:

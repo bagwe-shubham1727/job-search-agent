@@ -256,6 +256,8 @@ class LoopFetcher:
         board_events: The board's own event log (``http.*`` events).
         timeout_cap: The configured per-request timeout.
         sleep: Pause before a retry.
+        sent: GET attempts per URL in this loop run, shared by every board's
+            fetcher so the repeat rule holds for the whole run (GATE §4).
     """
 
     def __init__(
@@ -270,6 +272,7 @@ class LoopFetcher:
         board_events: EventSink,
         timeout_cap: float,
         sleep: Callable[[float], None] = time.sleep,
+        sent: dict[str, int] | None = None,
     ) -> None:
         self._policy = policy
         self._meter = meter
@@ -280,7 +283,7 @@ class LoopFetcher:
         self._board_events = board_events
         self._timeout_cap = timeout_cap
         self._sleep = sleep
-        self._sent: dict[str, int] = {}
+        self._sent = {} if sent is None else sent
         self.attempts = 0
 
     def get(self, url: str) -> FetchResult:
@@ -299,24 +302,17 @@ class LoopFetcher:
                 "tool.fetch.refused", {"board": self._board, "reason": verdict.reason}
             )
             return _refused(url, FetchErrorKind.POLICY_REFUSED, verdict.reason)
-        attempt = 0
-        while True:
-            refusal = self._refusal(url)
-            if refusal is not None:
-                return refusal
-            result = self._attempt(url, attempt)
-            if (
-                result.ok
-                or not is_transient(result)
-                or attempt >= self._retry.max_retries
-            ):
-                return result
-            if self._meter.seconds_left() < self._retry.min_seconds_left:
+        result = self._refusal(url) or self._attempt(url, 0)
+        for attempt in range(1, self._retry.max_retries + 1):
+            if result.ok or not is_transient(result):
+                break
+            skip = self._retry_refusal()
+            if skip is not None:
+                # The last real failure stays the board's result, with its saved body.
                 self._trace.emit(
-                    "tool.fetch.retry_skipped",
-                    {"board": self._board, "reason": "max_seconds"},
+                    "tool.fetch.retry_skipped", {"board": self._board, "reason": skip}
                 )
-                return result
+                break
             self._trace.emit(
                 "tool.fetch.retry",
                 {
@@ -327,7 +323,17 @@ class LoopFetcher:
                 },
             )
             self._sleep(self._retry.pause_s)
-            attempt += 1
+            result = self._refusal(url) or self._attempt(url, attempt)
+        return result
+
+    def _retry_refusal(self) -> str | None:
+        """Returns why a retry may not be sent now, or ``None`` (GATE §3, §5)."""
+        budget = self._meter.request_refusal()
+        if budget is not None:
+            return budget
+        if self._meter.seconds_left() < self._retry.min_seconds_left:
+            return "max_seconds"
+        return None
 
     def _refusal(self, url: str) -> FetchResult | None:
         if self._sent.get(url, 0) > self._retry.max_retries:
@@ -583,6 +589,7 @@ class _Loop:
         self.trace = trace
         self.meter = BudgetMeter(deps.plan.budget, deps.monotonic, deps.monotonic())
         self.outcomes: dict[int, BoardOutcome] = {}
+        self.sent: dict[str, int] = {}
 
     def plan_boards(self) -> list[tuple[int, tuple[str, str], str]] | str:
         """Applies the repeat rule and checks every URL; returns a refusal code.
@@ -643,6 +650,7 @@ class _Loop:
             board_events=deps.events,
             timeout_cap=base_http.timeout_s,
             sleep=self.d.sleep,
+            sent=self.sent,
         )
         floored = None if floor is None else FlooredProvider(deps.provider, floor)
         deps = dataclasses.replace(
