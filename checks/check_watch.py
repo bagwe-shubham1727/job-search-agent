@@ -41,7 +41,9 @@ def _ids(raw: Any) -> set[str] | None:  # noqa: ANN401
     """Posting IDs in a board response, or ``None`` if it is not a jobs object."""
     if not isinstance(raw, dict) or not isinstance(raw.get("jobs"), list):
         return None
-    return {str(job["id"]) for job in raw["jobs"] if isinstance(job, dict) and "id" in job}
+    return {
+        str(job["id"]) for job in raw["jobs"] if isinstance(job, dict) and "id" in job
+    }
 
 
 def check_board(
@@ -53,7 +55,9 @@ def check_board(
     run = _json(run_dir / "report.json")
     raw_ref = run.get("raw_evidence")
     results = [
-        e for e in trace if e["event"] == "tool.fetch.result" and e["board"] == board["board"]
+        e
+        for e in trace
+        if e["event"] == "tool.fetch.result" and e["board"] == board["board"]
     ]
     if raw_ref is None:
         rows.append(("raw saved", board["state"] != OK_BOARD, "no raw response saved"))
