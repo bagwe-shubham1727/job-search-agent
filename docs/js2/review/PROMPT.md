@@ -30,3 +30,10 @@ Constraints:
 
 When you finish, report: each file you changed and why, and every command you ran with its
 result.
+
+---
+
+**Note on delivery.** A locally installed Claude Code plugin hook (`context-mode`) appended its
+own block of tool-usage instructions to this prompt before it reached the subagent. That block
+is about which tools to use for reading files; it does not change the request above. The first
+launch attempt was held by auto mode for that reason and was re-sent unchanged.
