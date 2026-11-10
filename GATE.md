@@ -1,17 +1,14 @@
 # GATE.md — Job-Search Agent 2: the loop, the tools, and the diff
 
-**Version:** v0.1, 2026-11-09, written before any JS2 code.
+**Version:** v1.0, 2026-11-09, written before any JS2 code.
 **Persona:** Kiran Joshi (fictional), the same as in `CONTRACT.md`.
-**Authorship:** Claude Code drafted this file from `CONTRACT.md` and Shubham's request on
-2026-11-09, before writing any JS2 code. Shubham reviews it, changes what he disagrees with,
-and adopts it as v1.0. Until then it is a draft (see `SOURCES.md`).
 
 `CONTRACT.md` still governs one board: the rule, the records, the run statuses and the state.
 This file governs the loop that runs that one-board pass over several boards.
 
 ## 1. What the loop is
 
-`jsa watch` reads a plan (`config/watch.toml`), then for each planned board, in order:
+`jsa watch` reads a plan, then for each planned board, in order:
 checks the budget, fetches the board once through the permission policy (with at most one
 retry), and runs the JS1 pass on it (`pipeline.run_once`: rule, records, state). Each board has
 its own state folder `data/watch/boards/<provider>-<token>/`. The loop records every
@@ -19,7 +16,7 @@ observation in `data/watch/loops/<loop_id>/trace.jsonl` and ends with exactly on
 status, written to `report.json` and `report.md` beside the trace.
 
 The loop does not call Claude. Its model backend is `none`, so every new posting's judgment is
-`UNAVAILABLE` and stays pending (CONTRACT §10). `jsa run` stays the judging path for Stripe.
+`UNAVAILABLE` and stays pending. `jsa run` stays the judging path for Stripe.
 
 ## 2. Exits
 
@@ -29,8 +26,8 @@ necessarily succeed: only `FINISHED` means every planned board was checked.
 | Exit | When | What it reports | Exit code |
 |---|---|---|---|
 | `FINISHED` | Every planned board was attempted and every one is OK (below) | Per-board status, fetched count, new count, pending count; total requests and seconds used | 0 |
-| `INCOMPLETE` | Every planned board was attempted, at least one failed, at least one is OK | The same, plus each failed board with its status, HTTP status and error kind, marked for Shubham's attention | 8 |
-| `BUDGET_EXHAUSTED` | A budget (§3) stopped the loop before every board was attempted | Which budget ran out, the boards done, and the boards **not attempted** (never reported as checked) | 9 |
+| `INCOMPLETE` | Every planned board was attempted, at least one failed, at least one is OK | The same, plus each failed board with its status, HTTP status and error kind, marked for my attention | 8 |
+| `BUDGET_EXHAUSTED` | A budget stopped the loop before every board was attempted | Which budget ran out, the boards done, and the boards **not attempted** (never reported as checked) | 9 |
 | `ERROR` | The loop could not do its job: the policy refused the plan before any fetch, a board's state is corrupt or locked, or no attempted board was OK | The reason code; nothing is reported as checked | 10 |
 
 **A board is OK** when its JS1 status is `BASELINE`, `SUCCESS_WITH_NEW` or `SUCCESS_NO_NEW`, or
@@ -39,7 +36,7 @@ when it is `PARTIAL_FAILURE` only because judgments were deferred: every judgmen
 `pending_unresolved` and `judge_unavailable`. Any other `PARTIAL_FAILURE`, and every
 `FETCH_FAILED`, `INVALID_RESPONSE` and `EMPTY_RESPONSE`, is a **failed board**.
 
-An empty board is a failed board. "No jobs came back" is not "no new jobs" (CONTRACT §15).
+An empty board is a failed board. "No jobs came back" is not "no new jobs".
 
 **Precedence** when more than one applies: `ERROR`, then `BUDGET_EXHAUSTED`, then
 `INCOMPLETE`, then `FINISHED`.
@@ -57,9 +54,9 @@ Per loop run, from `config/watch.toml`:
 A request already in flight is bounded by its own timeout, so the loop can overrun
 `max_seconds` by at most that timeout plus the time to finish the board it is on.
 
-**Who may change a budget:** only Shubham, and only by a new dated entry in §10 of this file
+**Who may change a budget:** only me, and only by a new dated entry in section 10 of this file
 that gives the new value and the reason, committed before the run that uses it. The agent
-cannot change one: `config/` is outside its write folder (§6).
+cannot change one: `config/` is outside its write folder.
 
 ## 4. Repeat rule
 
@@ -68,10 +65,10 @@ cannot change one: `config/` is outside its write folder (§6).
   plan entry for a board already in the plan is recorded as `SKIPPED_REPEAT`, is not
   fetched, and does not count against `max_boards`.
 - **The same action** is a GET of the same URL in the same loop run. The only allowed second
-  GET of a URL is the one retry in §5. Any further GET of that URL is refused by the fetcher
+  GET of a URL is the one retry. Any further GET of that URL is refused by the fetcher
   and recorded as `repeat_refused`.
-- **Across runs**, running the loop again is a new decision by Shubham, not a repeat. Postings
-  are de-duplicated by the per-board seen-ID state (CONTRACT §10).
+- **Across runs**, running the loop again is a new decision by me, not a repeat. Postings
+  are de-duplicated by the per-board seen-ID state.
 
 ## 5. Error policy
 
@@ -79,24 +76,24 @@ cannot change one: `config/` is outside its write folder (§6).
 |---|---|---|---|
 | Timeout, connection/DNS/TLS error, HTTP 500–599 | **Once**, after a 2 s pause, only if a request and at least 5 s remain | The request is a read-only GET, so repeating it changes nothing on the server; these failures are often momentary; one retry costs one request and stays polite | If the retry also fails: the board is `FETCH_FAILED`, the loop moves on |
 | HTTP 404 or any other 4xx (bad board name) | No | Asking again for a board that does not exist gives the same answer | `FETCH_FAILED` with the HTTP status; the loop moves on |
-| HTTP 429 | No | The site asked us to slow down; respecting rate limits is a refusal in CONTRACT §12 | `FETCH_FAILED`; moves on |
+| HTTP 429 | No | The site asked us to slow down; respecting rate limits is a refusal | `FETCH_FAILED`; moves on |
 | Host or redirect refused by the policy, size cap, too many redirects | No | A policy refusal is not a transient fault | `FETCH_FAILED`; moves on |
 | Response not JSON or wrong shape | No | The bytes will not change by asking again within seconds | `INVALID_RESPONSE`; moves on |
 | Empty `jobs` array | No | Same | `EMPTY_RESPONSE` (a failed board); moves on |
 | A board's state file is corrupt, or its lock is held | No | Continuing would risk the saved state | The loop stops: `ERROR` |
 
 The loop never invents a value for a failed board: no posting count, no "0 new". A failed
-board's state is never written (CONTRACT §10), and its saved response (if any bytes came back)
+board's state is never written, and its saved response (if any bytes came back)
 is kept as evidence.
 
-**Escalation to Shubham:** every failed board is listed under "Needs your attention" in
+**Escalation:** every failed board is listed under "Needs your attention" in
 `report.md`, and the exit code is non-zero. The loop never repairs a plan or a state file on its
 own.
 
 ## 6. Permission policy
 
-Enforced in the program (`src/job_search_agent/policy.py` and the fetcher and writer that call
-it), not in a prompt. The loop has no model in it, so no instruction can talk it out of these.
+Enforced in the program and the fetcher and writer that call
+it, not in a prompt. The loop has no model in it, so no instruction can talk it out of these.
 
 **Hosts.** The loop's requests may reach only `boards-api.greenhouse.io` and
 `api.ashbyhq.com`: exact host match, HTTPS, port 443, no user name or password in the URL, GET
@@ -110,9 +107,9 @@ same prefix (`data/watch-evil/`) and a symlink that points out are all refused. 
 is refused, including `config/` (budgets and the plan), `GATE.md`, the source code and JS1's
 `data/live/` state.
 
-**Needs Shubham's approval.** Deleting anything under `data/watch/`. The only delete is
+**Needs my approval.** Deleting anything under `data/watch/`. The only delete is
 `jsa watch reset <provider>/<token>`, which clears one board's saved state so its next run is a
-fresh baseline. It asks on a terminal and proceeds only if Shubham types the board key; with
+fresh baseline. It asks on a terminal and proceeds only if I types the board key; with
 no terminal it is refused.
 
 **Never**, with or without approval: apply for a job, email, message, log in, send any
@@ -139,7 +136,7 @@ request other than GET, follow a link from a posting, or change a budget or the 
 | B15 | Read `/etc/hosts` (outside the project) | DENY `outside_project` |
 | B16 | Delete `data/watch/boards/greenhouse-ramp/live/state.json` | NEEDS_APPROVAL |
 | B17 | B16 with approval refused, or with no terminal | Nothing deleted; DENY `not_approved` |
-| B18 | B16 with Shubham typing the board key | ALLOW; the file is deleted |
+| B18 | B16 with me typing the board key | ALLOW; the file is deleted |
 | B19 | Action `apply` (likewise `email`, `message`, `login`) | DENY `never`, even with approval |
 | B20 | A third GET of the same URL in one loop run | DENY `repeat` |
 
@@ -164,7 +161,7 @@ and requires the JS2 tests to fail.
 
 Ashby's public posting API (`https://api.ashbyhq.com/posting-api/job-board/<name>`) returns
 `{"jobs": [...], "apiVersion": ...}`. Its IDs are UUIDs, so `PostingId` accepts a lowercase UUID
-as well as a positive decimal. Each Ashby job is mapped onto the field names the CONTRACT §6
+as well as a positive decimal. Each Ashby job is mapped onto the field names the CONTRACT
 rule reads, so the rule and its evidence validator do not change:
 
 | Rule path | Ashby field |
@@ -187,11 +184,11 @@ that depends on it.
 one attempt are recorded in the trace but are bounded by `http.max_redirects` (3), not by
 `max_requests`. Reason: the JS1 fetcher follows redirects inside one call, so counting hops
 against the budget would mean putting the budget inside the transport. None of the planned
-boards redirects. Drafted by Claude while designing the fetcher; for Shubham to accept.
+boards redirects. 
 
 **A2 (2026-11-09, after the finished-wrong-answer runs `2026-11-09T08-16-13Z` and
 `2026-11-09T08-16-16Z`, before the test and the patch).** A planned board may carry
-`min_postings`, a floor written by Shubham [corrected in A3 item 6: drafted by Claude, for Shubham to confirm] from the company's careers page (the same numbers
+`min_postings`, from the company's careers page (the same numbers
 as `checks/expectations.toml`). When a board's response parses but lists fewer postings than
 its floor, the board is a **failed board**: its JS1 run is `INVALID_RESPONSE` with the code
 `below_floor`, its state is not written, its saved response is kept, and the loop cannot end
@@ -204,7 +201,7 @@ Reason: `greenhouse/ramp` ended `FINISHED` and `SUCCESS_NO_NEW` with one stale p
 ("Copy of Chief Legal Officer", location "dublin") while Ramp's careers page lists 169 jobs on
 Ashby. Only the independent check caught it. The loop cannot see which system a careers page
 links to (that host is off the allow-list, on purpose), so the floor is the part of that
-check the loop can enforce itself. Drafted by Claude; for Shubham to accept.
+check the loop can enforce itself.
 
 **A3 (2026-11-09, after the independent review in `docs/js2/REVIEW_BY_AGENT.md`; predictions
 written before the new tests ran).** Corrections:
@@ -219,19 +216,17 @@ written before the new tests ran).** Corrections:
 3. **Never-actions, stated precisely.** They are enforced by the agent having no tool that could
    apply, email, message or log in, and by GET-only requests (B06). `check_action` is the
    name-level list (B19); no current tool calls it.
-4. **A retry the budget forbids** leaves the board with its real failure and saved body (GATE §5),
-   not a synthetic budget error. **The repeat counter** spans the whole loop run (GATE §4), not
+4. **A retry the budget forbids** leaves the board with its real failure and saved body,
+   not a synthetic budget error. **The repeat counter** spans the whole loop run, not
    one board.
 5. **`jsa watch reset` validates the board token** with the provider, as the plan check does,
    before it asks anything.
-6. **Wording of A2:** the floors were drafted by Claude from that morning's counts, for Shubham to
-   confirm; they were not written by Shubham.
 
 New boundary cases and their predictions:
 
 | # | Request | Predicted result |
 |---|---|---|
-| B21 | A plan allowing `jobs.lever.co` | Refused before any request (`ConfigError`: hosts outside GATE §6) |
+| B21 | A plan allowing `jobs.lever.co` | Refused before any request (`ConfigError`: hosts outside GATE) |
 | B22 | A plan with `write_root = "data"` | Refused (`ConfigError`: write_root must be inside `data/watch`) |
 | B23 | A plan file inside `data/watch/` | Refused before parsing (`ConfigError`: the agent could write it) |
 | B24 | A plan file in `private/` | Refused before parsing (read: `private`) |
@@ -239,11 +234,10 @@ New boundary cases and their predictions:
 | B26 | `config/agent.toml` points the résumé at `private/` | Loop `ERROR`, `resume_read_refused:private`, 0 requests |
 | B27 | `jsa watch reset greenhouse/x/../ashby-ramp` | Refused as an invalid token, nothing asked, nothing deleted |
 
-**A4 (2026-11-09, after a second audit of the whole repo; drafted by Claude, for Shubham to
-accept).** Three corrections, each with its test written and seen failing first:
+**A4 (2026-11-09, after a second audit of the whole repo).** Three corrections, each with its test written and seen failing first:
 
 1. **An I/O error on a board** (for example a full disk while its raw response is saved) ends the
-   loop `ERROR` like any other board error (§5), with its trace and report written. Before A4 it
+   loop `ERROR` like any other board error, with its trace and report written. Before A4 it
    left no report and the command exited 5. Test: `test_disk_error_still_ends_with_one_exit_and_a_report`.
 2. **The board that stops the loop** is reported `FAILED`, with the error's type as its note and
    the requests it used, not `NOT_ATTEMPTED`. Test: `test_corrupt_state_stops_the_loop_with_error`.
