@@ -127,3 +127,24 @@ parsed a saved response before the live one.
 
 Two more the floor cannot catch at all: a stale board that still lists more postings than its
 floor, and a floor written too low by hand.
+
+## 8. The revision (after Shubham's decision to revise)
+
+Facts, in commit order; recorded by Claude. Shubham's review of the revision is his to add.
+
+| Step | Who | Commit | Result |
+|---|---|---|---|
+| The missing test from §7: a pending retry from an old saved raw below the floor keeps the board OK | Shubham | `5a08794` | Passed on `8259d8b`'s design; **failed under mutation m2** (board `FAILED`, note `below_floor`, although the live board met its floor) |
+| Order-independence test, written before the revision: an old raw parsed first is not floored, the live one still is | Claude | this revision commit, file `tests/watch/test_floor_live_body.py` | Red before the revision for a missing feature (`TypeError: ... 'live_body'`), [`revision-red.txt`](revision-red.txt) |
+| The revision: the floor applies to the live response, recognised by its bytes from the loop's fetcher (`LoopFetcher.live_body`), not to "the first parse"; `FlooredProvider`'s first-parse flag is gone | Claude | this revision commit, [`revision.diff`](revision.diff) | 10 floor tests pass ([`revision-green.txt`](revision-green.txt)); full suite 1099 passed; ruff, mypy clean |
+| Four mutations of the revision | Claude | [`revision-mutations.txt`](revision-mutations.txt) | All four caught: floor every parse (3 tests fail, including Shubham's), fetcher never records the live body (2), `<=` (2), flooring empty boards (1) |
+| Live run of `config/watch-wrong-board.toml`, loop `2026-11-11T01-14-05Z` | Claude | this revision commit | `ERROR`, `greenhouse/ramp` `INVALID_RESPONSE` `below_floor`, exit 10; `state.json` SHA-256 unchanged; independent check 6 passed, 0 failed ([`../evidence/check-2026-11-11T01-14-05Z.txt`](../evidence/check-2026-11-11T01-14-05Z.txt)) |
+
+Why not check the floor inside `LoopFetcher`, before `run_once`, as §6 proposed: a refusal there
+would reach JS1 as a failed fetch, so the board would become `FETCH_FAILED`, not the
+`INVALID_RESPONSE` that GATE A2 requires, and keeping `INVALID_RESPONSE` that way would mean
+changing JS1's `pipeline.py`. The revision keeps A2 and JS1 unchanged and removes the ordering
+dependency by identifying the live response explicitly. The gap §7 named is now closed by
+Shubham's test; the two cases the floor cannot catch at all (a stale board above its floor, a
+floor written too low) remain.
+

@@ -40,6 +40,6 @@ the course AI policy says Claude must not invent his struggle or understanding.
   arrives one commit later, so the tests do not run on that single commit. Every later commit
   runs.
 - No live retry happened in any run; retries are shown only by constructed tests.
-- `FlooredProvider` floors "the first parse", which depends on `pipeline.run_once` parsing the
-  live body first (mutation m2). The review packet names the better design; that is Shubham's
-  accept/revise call.
+- ~~`FlooredProvider` floors "the first parse"~~ Closed 2026-11-10: Shubham decided to revise,
+  wrote the m2 test (`5a08794`), and the revision floors the live response by its bytes
+  (review packet §8).
