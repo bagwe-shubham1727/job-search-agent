@@ -42,7 +42,7 @@ code.
 
 ```bash
 uv sync                                   # create .venv from uv.lock
-uv run pytest -q                          # full suite, offline (network blocked in tests); 1096 passed
+uv run pytest -q                          # full suite, offline (network blocked in tests); 1099 passed
 uv run ruff check . && uv run mypy src    # lint and strict types
 
 uv run jsa watch run                      # the loop over config/watch.toml (live; ~11 MB of downloads)
