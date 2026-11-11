@@ -52,6 +52,21 @@ Claude Code (Opus 5.5):
   sign-off itself, the driver's-seat reasons and `FRICTIONAL.md` are mine.
 - **Review.** A fresh Claude reviewer agent checked code quality and the assignment fit at the
   end; its report is `docs/js2/REVIEW_BY_AGENT.md`.
+- **Second audit (2026-11-09, at my request).** Claude audited the whole repo and fixed four
+  issues, each with a test seen failing first: an I/O error left no loop report, the board that
+  stopped the loop was listed `NOT_ATTEMPTED`, the checker counted only jobs with an ID, and
+  Ctrl-D at the reset prompt crashed. Claude drafted GATE A4 for them (`c001ae0`).
+- **Transcripts.** Claude untracked and git-ignored the three JS1 session transcripts, per the
+  JS1 TA note (`fcae71e`).
+- **The revision (2026-11-10, after my decision to revise).** Claude wrote the order test
+  (`tests/watch/test_floor_live_body.py`) before the change, then made the floor apply to the
+  live response by its bytes, ran four mutations (all caught), ran the live wrong-board loop
+  `2026-11-11T01-14-05Z`, and recorded the facts in review packet §8 (`707ecea`). I reviewed it
+  and accepted it (`d9d63a4`).
+- **Third live run (2026-11-10).** Claude ran the main-plan loop `2026-11-11T01-26-35Z` and saved
+  the independent check (`95d0961`).
+- **Commits.** Claude committed and pushed my edits when I asked, and updated the test counts in
+  the docs (for example `595a87e`).
 
 ## Job-Search Agent 1 — the contract and the watch
 
