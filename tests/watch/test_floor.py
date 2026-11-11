@@ -112,3 +112,31 @@ def test_empty_board_with_a_floor_stays_empty_response(p: Project) -> None:
 def test_floor_must_be_positive(floor: int) -> None:
     with pytest.raises(ValidationError):
         _plan({"provider": "ashby", "token": "ramp", "min_postings": floor})
+
+
+def test_pending_retry_from_an_old_raw_below_the_floor(p: Project) -> None:
+    url = ASHBY.format("linear")
+    plan_no_floor = _plan({"provider": "ashby", "token": "linear"})
+    plan_with_floor = _plan(LINEAR)
+
+    p.run(plan_no_floor, {url: ok(ashby_body(*LINEAR_IDS[:3]))})
+
+    p.run(plan_no_floor, {url: ok(ashby_body(*LINEAR_IDS[:4]))})
+
+    five_ids = [
+        LINEAR_IDS[0],
+        LINEAR_IDS[1],
+        LINEAR_IDS[2],
+        LINEAR_IDS[4],
+        LINEAR_IDS[5],
+    ]
+    report3 = p.run(plan_with_floor, {url: ok(ashby_body(*five_ids))})
+
+    board = report3.boards[0]
+    assert board.state is BoardState.OK
+    assert board.note != "below_floor"
+
+    events_path = p.root / board.run_folder / "events.jsonl"
+    events = [json.loads(line) for line in events_path.read_text().splitlines()]
+    retry_event = next(e for e in events if e.get("event") == "pending.retry")
+    assert retry_event["posting_from"] == "saved_raw"
