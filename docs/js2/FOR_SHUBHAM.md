@@ -1,5 +1,8 @@
 # For Shubham: what is left, in order
 
+> **Historical.** This is the checklist Claude left on 2026-11-09. Shubham completed it on
+> 2026-11-10; the commits are in `docs/js2/BUILD_LOG.md` and the git log.
+
 Everything Claude could do is committed locally on `main`. **Nothing is pushed and nothing is
 submitted.** JS2 is due **Tuesday 2026-11-10, 11:59 pm ET**. These parts are yours by the
 course AI policy and the assignment's own wording; plan on about 1–2 hours.

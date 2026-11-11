@@ -119,6 +119,9 @@ count in `LoopFetcher`'s result before `run_once` parses it) instead of "the fir
 
 ## 7. One case the test would still miss
 
+> **Update 2026-11-10:** the m2 gap below is now closed by Shubham's test (`5a08794`) and the
+> revision (§8). The cases the floor cannot catch at all, at the end of this section, remain.
+
 **Flooring every parse instead of only the first.** Mutation m2 changes `FlooredProvider` to
 floor every `parse` call, and all 76 tests in `tests/watch` still pass. No test has a board with
 a pending judgment whose older saved response is below the floor, so nothing checks that a

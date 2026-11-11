@@ -64,15 +64,17 @@ once per wrong version W1–W9 in a child pytest and checks that the named test 
 
 ## What ran
 
-All live, on 2026-11-09, run by Claude in one session (times UTC; ET is UTC−5).
+All live, run by Claude: five on 2026-11-09 and two on 2026-11-10 ET (loop IDs are UTC; ET is UTC−5).
 
 | Loop | Plan | Code | Exit | Boards | Requests | Independent check |
 |---|---|---|---|---|---:|---|
-| [`08-14-22Z`](data/watch/loops/2026-11-09T08-14-22Z/report.md) run 1 | `watch.toml` | `e955298` | `INCOMPLETE` (8) | Stripe 768, Figma 144, Ramp 169, Linear 32: `BASELINE`; `ashby/linearapp`: 404, `FETCH_FAILED`, not retried | 5 | 21/21 pass |
+| [`08-14-22Z`](data/watch/loops/2026-11-09T08-14-22Z/report.md) run 1 | `watch.toml` | `e955298` | `INCOMPLETE` (8) | Stripe 768, Figma 144, Ramp 169, Linear 32: `BASELINE`; `ashby/linearapp`: 404, `FETCH_FAILED`, not retried | 5 | 21 pass, 0 fail |
 | [`08-16-13Z`](data/watch/loops/2026-11-09T08-16-13Z/report.md) | `watch-wrong-board.toml` | `e54a26d` | `FINISHED` (0) — wrong | `greenhouse/ramp` 1 stale posting, `BASELINE` | 1 | 3 fail |
 | [`08-16-16Z`](data/watch/loops/2026-11-09T08-16-16Z/report.md) | `watch-wrong-board.toml` | `e54a26d` | `FINISHED` (0) — wrong, "no new jobs" | `greenhouse/ramp` `SUCCESS_NO_NEW` | 1 | 3 fail |
-| [`08-23-46Z`](data/watch/loops/2026-11-09T08-23-46Z/report.md) after the patch | `watch-wrong-board.toml` | `8259d8b` | `ERROR` (10) | `greenhouse/ramp` `INVALID_RESPONSE`, `below_floor`; state untouched | 1 | 7/7 pass |
-| [`08-27-13Z`](data/watch/loops/2026-11-09T08-27-13Z/report.md) run 2 | `watch.toml` (with A2 floors) | `127bf82` | `INCOMPLETE` (8) | Stripe 768, Figma 144, Ramp 169, Linear 32: `SUCCESS_NO_NEW`, no floor tripped; `ashby/linearapp`: 404 again | 5 | 25/25 pass |
+| [`08-23-46Z`](data/watch/loops/2026-11-09T08-23-46Z/report.md) after the patch | `watch-wrong-board.toml` | `8259d8b` | `ERROR` (10) | `greenhouse/ramp` `INVALID_RESPONSE`, `below_floor`; state untouched | 1 | 6 pass, 0 fail (7/7 with the checker as it was then) |
+| [`08-27-13Z`](data/watch/loops/2026-11-09T08-27-13Z/report.md) run 2 | `watch.toml` (with A2 floors) | `127bf82` | `INCOMPLETE` (8) | Stripe 768, Figma 144, Ramp 169, Linear 32: `SUCCESS_NO_NEW`, no floor tripped; `ashby/linearapp`: 404 again | 5 | 25 pass, 0 fail |
+| [`2026-11-11T01-14-05Z`](data/watch/loops/2026-11-11T01-14-05Z/report.md) after the revision | `watch-wrong-board.toml` | `b8097f1` + the revision, committed as `707ecea` | `ERROR` (10) | `greenhouse/ramp` `INVALID_RESPONSE`, `below_floor`; state untouched | 1 | 6 pass, 0 fail |
+| [`2026-11-11T01-26-35Z`](data/watch/loops/2026-11-11T01-26-35Z/report.md) run 3 | `watch.toml` | `595a87e` | `INCOMPLETE` (8) | 48 new postings: Stripe 29 (of 779), Figma 6 (144), Ramp 12 (176), Linear 1 (33), all judgments deferred; one rule `MATCH` (Ramp, "Software Engineer, Security, Stablecoin"); `ashby/linearapp`: 404 | 5 | 25 pass, 0 fail |
 
 Not run live: a retry (timeout or 5xx), and a budget stop. Both are shown only by constructed
 tests (`tests/watch/test_loop.py`).
