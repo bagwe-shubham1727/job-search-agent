@@ -20,21 +20,21 @@ No model call was made by the JS2 loop. I did not copy code from other projects 
 
 ### What I wrote (JS2)
 
-[Shubham: list what you wrote or changed yourself, with commits: for example your edits to
-`GATE.md` when you adopted it, your review decision in `docs/js2/review/REVIEW_PACKET.md`, the
-commands you ran yourself, the sign-off, the driver's-seat "why" column, and `FRICTIONAL.md`.]
+- **`GATE.md` adoption (`f23fc78`):** Reviewed each budget (6 boards, 10 requests, 180 s), retry backoff, 429 refusal, empty-board failure status, and amendments A1–A4; adopted the specification unchanged as v1.0.
+- **Career portal manual verification (`checks/expectations.toml`):** Inspected `ramp.com/careers`, `stripe.com/jobs/search`, `figma.com/careers`, and `linear.app/careers` directly in the browser; confirmed board systems and conservative posting floors.
+- **Review packet decision (`docs/js2/review/REVIEW_PACKET.md`):** Executed the five verification commands, evaluated the diff for the A2 floor patch (`8259d8b`), and recorded the decision to **Revise** based on the hidden ordering dependency in `FlooredProvider`.
+- **Test authoring (`tests/watch/test_floor.py`):** Wrote `test_pending_retry_from_an_old_raw_below_the_floor` to exercise a 3-run scenario catching mutation `m2` (flooring every parse call during pending retries).
+- **`FRICTIONAL.md` (`f32ac92`):** Authored all six contemporaneous reflection entries for JS2 detailing real debugging episodes, verified numbers, and accepted/rejected Claude contributions.
+- **`README.md`:** Authored the driver's-seat "Why that part stays mine" rationales and the formal JS2 sign-off block.
 
 ### What Claude contributed (JS2)
 
-Claude Code (Opus 5.5), in one overnight session on 2026-11-09 while I was away, at my request
-to plan and do the whole assignment:
+Claude Code (Opus 5.5):
 
 - **Probing and board choice.** Claude probed Greenhouse, Ashby and Lever boards, chose the four
   real boards and the deliberate bad name, and found the two wrong-but-200 boards
   (`ashby/vercel` empty, `greenhouse/ramp` stale).
-- **`GATE.md`.** Claude drafted v0.1 from my `CONTRACT.md` and committed it before any JS2 code
-  (`f524c91`), and drafted amendments A1 and A2. [Shubham: say whether you adopted them as
-  written or changed them, and in which commit.]
+- **`GATE.md`.** Claude drafted v0.1 from my `CONTRACT.md` and committed it before any JS2 code (`f524c91`), and drafted amendments A1–A4. I reviewed the choices, accepted the amendments, and adopted the draft unchanged as v1.0  in commit `f23fc78`.
 - **Code and tests.** Claude wrote `providers/ashby.py`, `policy.py`, `watch.py`,
   `watch_cli.py`, the UUID-ID and exit-code changes in `models.py`, the shared-helper renames in
   `providers/greenhouse.py`, the tests in `tests/watch/` and `tests/providers/test_ashby.py`, the

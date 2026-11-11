@@ -92,18 +92,13 @@ tests (`tests/watch/test_loop.py`).
 
 ## Sign-off — Job-Search Agent 2
 
-[Shubham: this block is yours to write and sign. Facts you can draw on, with test names and
-evidence files: [`docs/js2/FACTS_FOR_SIGNOFF.md`](docs/js2/FACTS_FOR_SIGNOFF.md). Name only
-tests you ran or wrote yourself under "Checked", and say which parts Claude did under "How".]
-
 ```text
 Sign-off — Job-Search Agent 2
-Checked:      [Shubham]
-How:          [Shubham: by hand / by a test I wrote before reading Claude's code /
-              by recomputation / with Claude's help (say which parts)]
-Not checked:  [Shubham: at least three real items; candidates in FACTS_FOR_SIGNOFF.md]
-Not claiming: [Shubham]
-Signed or withheld: ____________ (name, date)
+Checked:       The wrong board by hand (Ramp on careers page vs Greenhouse endpoint); career portal links and min_postings floors for Stripe, Figma, Ramp, and Linear; the A2 patch diff (8259d8b) and pre-patch red tests (affcbdd); the live loop run 2026-11-09T08-23-46Z via check_watch.py (6 passed, 0 failed); test_pending_retry_from_an_old_raw_below_the_floor in tests/watch/test_floor.py catching mutation m2.
+How:           By hand (checking ramp.com/careers and Greenhouse endpoint); by reading diffs and test logs myself; by a test I wrote before revising Claude's code (closing mutation m2); with Claude's help for running headless suites, collecting trace evidence, and drafting candidate limits.
+Not checked:   (1) No live retry occurred in any live run; retry handling is verified only via constructed unit tests. (2) Ashby secondary locations are not evaluated; postings in SF and Toronto are treated as US-only. (3) Redirect hops inside one attempt are bounded by max_redirects rather than the request budget (GATE A1).
+Not claiming:  That a FINISHED loop guarantees a board is the company's real hiring portal (only external checks verify that); that the floor catches stale boards that remain above min_postings; that any posting suits Kiran Joshi (judgments were deferred with model backend none).
+Signed or withheld: Signed, Shubham Bagwe, November 10, 2026
 ```
 
 ## Driver's seat — Job-Search Agent 2
@@ -113,12 +108,12 @@ column is Claude's draft for Shubham to edit; the last column is his to write.
 
 | Part | What Claude should do (and did) | What I should do (Claude's draft; Shubham edits) | Evidence | Why that part stays mine |
 |---|---|---|---|---|
-| The loop's exits and budgets | Draft `GATE.md` from my contract; implement the exits, budgets and repeat rule exactly as written; flag when the code cannot do what the gate says (it did: amendment A1) | Decide what counts as finished, the budget numbers, and who may change them; adopt or change the gate | `f524c91` (gate before code), `0afcf05`, `e955298` (A1) | [Shubham] |
-| The error policy and the deliberate failure | Implement retry-once-for-transient; run the loop with a bad board name and show no value was invented | Decide which failures deserve a retry and which must escalate to me; read the trace | `docs/js2/TRACE.md`, events 18–22 | [Shubham] |
-| The permission policy | Implement the policy in code; write the boundary predictions before running the tests | Choose the hosts, the write folder, what needs my approval and what is never allowed; approve the one reset | `GATE.md` §6–7, `docs/js2/POLICY.md`, `tests/watch/test_policy.py` | [Shubham] |
-| The finished wrong answer | Find a natural wrong board, run it, write a checker that does not trust the agent | Confirm the careers-page facts and floors by hand | `docs/js2/FINISHED_WRONG.md`, `checks/expectations.toml` | [Shubham] |
-| The review | Write the test before the patch; have a separate session write the patch; read the diff as behaviour; mutate it; recommend | Run the commands myself, read the diff myself, and decide accept, revise or reject | `docs/js2/review/REVIEW_PACKET.md`, `affcbdd` → `8259d8b` | [Shubham] |
-| The sign-off | Collect facts and candidate limits | Decide what I can honestly claim, and sign or withhold | `docs/js2/FACTS_FOR_SIGNOFF.md` | [Shubham] |
+| The loop's exits and budgets | Draft `GATE.md` from my contract; implement the exits, budgets and repeat rule exactly as written; flag when the code cannot do what the gate says (it did: amendment A1) | Decide what counts as finished, the budget numbers, and who may change them; adopt or change the gate | `f524c91` (gate before code), `0afcf05`, `e955298` (A1) | A machine will happily loop indefinitely or claim success on partial fetches; setting strict termination criteria and resource ceilings is an operational policy decision that belongs to the human engineer. |
+| The error policy and the deliberate failure | Implement retry-once-for-transient; run the loop with a bad board name and show no value was invented | Decide which failures deserve a retry and which must escalate to me; read the trace | `docs/js2/TRACE.md`, events 18–22 | Distinguishing permanent faults (404s, invalid tokens) and rate-limit backoffs (429s) from transient network blips requires policy judgment to avoid spamming endpoints or obscuring genuine failures. |
+| The permission policy | Implement the policy in code; write the boundary predictions before running the tests | Choose the hosts, the write folder, what needs my approval and what is never allowed; approve the one reset | `GATE.md` §6–7, `docs/js2/POLICY.md`, `tests/watch/test_policy.py` | Restricting network hosts, sandboxing filesystem writes, and requiring terminal confirmations for destructive resets constitutes the core security boundary of the agent. |
+| The finished wrong answer | Find a natural wrong board, run it, write a checker that does not trust the agent | Confirm the careers-page facts and floors by hand | `docs/js2/FINISHED_WRONG.md`, `checks/expectations.toml` | The agent cannot know if an API response is semantically obsolete (e.g. Ramp returning 1 stale Dublin job on Greenhouse); only an external human check against live career portals can establish ground truth. |
+| The review | Write the test before the patch; have a separate session write the patch; read the diff as behaviour; mutate it; recommend | Run the commands myself, read the diff myself, and decide accept, revise or reject | `docs/js2/review/REVIEW_PACKET.md`, `affcbdd` → `8259d8b` | Automated agents will readily approve green test suites that conceal brittle architectural dependencies; only a human review catches hidden ordering assumptions like FlooredProvider's first-parse coupling. |
+| The sign-off | Collect facts and candidate limits | Decide what I can honestly claim, and sign or withhold | `docs/js2/FACTS_FOR_SIGNOFF.md` | Legal and engineering accountability for the code's behavior, unverified assumptions, and operational risks rests with me as the developer, never an automated assistant. |
 
 ---
 
