@@ -9,7 +9,7 @@ the empty-board rule alone.
 **Who did what.** Claude (this orchestrating session) wrote amendment A2 and the test. A fresh
 Claude Code subagent, with no shared conversation, wrote the patch in an isolated worktree from
 the request in [`PROMPT.md`](PROMPT.md). Claude then read the diff and ran the checks below. The
-decision at the end is Shubham's.
+decision at the end is mine.
 
 ## 1. The defect, reproduced first
 
