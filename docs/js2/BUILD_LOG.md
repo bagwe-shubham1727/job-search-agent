@@ -31,6 +31,7 @@ the course AI policy says Claude must not invent his struggle or understanding.
 | 03:38–03:39 | The plan file could widen its own policy (any host, `write_root = "data"`). Wrote A3 with predictions B21–B27, then the ceilings, the read-before-parse check, the résumé read check and reset-token validation. | `e1e41b5`, `0c48e2e` |
 | 03:40 | Checker reworked: a failed board's expectations are facts; one decisive row asks whether the failure is justified. The pre-relaxation output is kept. | `32d0d8c` |
 | 15:40 | Second audit of the whole repo (Claude, at Shubham's request). Fixed with tests seen failing first: an I/O error on a board left no loop report; the board that stopped the loop was listed `NOT_ATTEMPTED`; the checker counted only jobs with an ID; Ctrl-D at the reset question crashed. 1096 tests. | GATE A4 |
+| 20:26 (11-10) | Third main-plan live run, loop `2026-11-11T01-26-35Z` (run by Claude at Shubham's request): `INCOMPLETE` (only `ashby/linearapp` 404), 5 requests, 1.8 s. New postings: Stripe 29, Figma 6, Ramp 12, Linear 1 (the first live Ashby postings the rule judged: 13). One rule `MATCH`: Ramp `d1183b00-6590-4fe4-a585-28d84e578fe3` "Software Engineer, Security, Stablecoin", New York. Judgments deferred (no model in the loop). Independent check 25 passed, 0 failed. | `docs/js2/evidence/check-2026-11-11T01-26-35Z.txt` |
 
 ## Things that are still open
 

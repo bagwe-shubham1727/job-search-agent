@@ -127,6 +127,7 @@
     "6231956004",
     "6232410004",
     "6232422004",
+    "6232528004",
     "6232541004",
     "6232584004",
     "6233040004",
@@ -146,12 +147,90 @@
     "6240900004",
     "6241542004",
     "6242561004",
+    "6242701004",
     "6243897004",
-    "6245293004"
+    "6245293004",
+    "6247174004",
+    "6249978004",
+    "6250826004",
+    "6251998004"
   ],
-  "last_successful_fetch_utc": "2026-11-09T08:27:13.658994Z",
-  "last_successful_run_id": "2026-11-09T08-27-13Z",
-  "run_started_at_utc": "2026-11-09T08:27:13.636858Z",
-  "pending": [],
+  "last_successful_fetch_utc": "2026-11-11T01:26:35.888193Z",
+  "last_successful_run_id": "2026-11-11T01-26-35Z",
+  "run_started_at_utc": "2026-11-11T01:26:35.864466Z",
+  "pending": [
+    {
+      "posting_id": "6232528004",
+      "last_status": "UNAVAILABLE",
+      "queued_run_id": "2026-11-11T01-26-35Z",
+      "last_attempt_run_id": "2026-11-11T01-26-35Z",
+      "attempts": 1,
+      "source": {
+        "path": "data/watch/boards/greenhouse-figma/live/runs/2026-11-11T01-26-35Z/raw/greenhouse-figma.json",
+        "sha256": "fbcdb8941c5a7181af80242d3637730e99d47b27f05e8b624dbbfb34fe44c315",
+        "index": 39
+      }
+    },
+    {
+      "posting_id": "6242701004",
+      "last_status": "UNAVAILABLE",
+      "queued_run_id": "2026-11-11T01-26-35Z",
+      "last_attempt_run_id": "2026-11-11T01-26-35Z",
+      "attempts": 1,
+      "source": {
+        "path": "data/watch/boards/greenhouse-figma/live/runs/2026-11-11T01-26-35Z/raw/greenhouse-figma.json",
+        "sha256": "fbcdb8941c5a7181af80242d3637730e99d47b27f05e8b624dbbfb34fe44c315",
+        "index": 102
+      }
+    },
+    {
+      "posting_id": "6247174004",
+      "last_status": "UNAVAILABLE",
+      "queued_run_id": "2026-11-11T01-26-35Z",
+      "last_attempt_run_id": "2026-11-11T01-26-35Z",
+      "attempts": 1,
+      "source": {
+        "path": "data/watch/boards/greenhouse-figma/live/runs/2026-11-11T01-26-35Z/raw/greenhouse-figma.json",
+        "sha256": "fbcdb8941c5a7181af80242d3637730e99d47b27f05e8b624dbbfb34fe44c315",
+        "index": 94
+      }
+    },
+    {
+      "posting_id": "6249978004",
+      "last_status": "UNAVAILABLE",
+      "queued_run_id": "2026-11-11T01-26-35Z",
+      "last_attempt_run_id": "2026-11-11T01-26-35Z",
+      "attempts": 1,
+      "source": {
+        "path": "data/watch/boards/greenhouse-figma/live/runs/2026-11-11T01-26-35Z/raw/greenhouse-figma.json",
+        "sha256": "fbcdb8941c5a7181af80242d3637730e99d47b27f05e8b624dbbfb34fe44c315",
+        "index": 137
+      }
+    },
+    {
+      "posting_id": "6250826004",
+      "last_status": "UNAVAILABLE",
+      "queued_run_id": "2026-11-11T01-26-35Z",
+      "last_attempt_run_id": "2026-11-11T01-26-35Z",
+      "attempts": 1,
+      "source": {
+        "path": "data/watch/boards/greenhouse-figma/live/runs/2026-11-11T01-26-35Z/raw/greenhouse-figma.json",
+        "sha256": "fbcdb8941c5a7181af80242d3637730e99d47b27f05e8b624dbbfb34fe44c315",
+        "index": 113
+      }
+    },
+    {
+      "posting_id": "6251998004",
+      "last_status": "UNAVAILABLE",
+      "queued_run_id": "2026-11-11T01-26-35Z",
+      "last_attempt_run_id": "2026-11-11T01-26-35Z",
+      "attempts": 1,
+      "source": {
+        "path": "data/watch/boards/greenhouse-figma/live/runs/2026-11-11T01-26-35Z/raw/greenhouse-figma.json",
+        "sha256": "fbcdb8941c5a7181af80242d3637730e99d47b27f05e8b624dbbfb34fe44c315",
+        "index": 135
+      }
+    }
+  ],
   "abandoned": []
 }
