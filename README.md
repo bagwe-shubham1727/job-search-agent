@@ -1,6 +1,6 @@
 # Job-Search Agent 3 — The Filter, the Tool, and the Score
 
-**Student:** Shubham Bagwe · **Course:** INFO 7375 — Prompt Engineering for Generative AI (Northeastern University) · **Instructor:** Nik Bear Brown · **Assignment:** JS3, due 2026-11-23 (this work is dated 2026-11-25)
+**Student:** Shubham Bagwe · **Course:** INFO 7375 — Prompt Engineering for Generative AI (Northeastern University) · **Instructor:** Nik Bear Brown · **Assignment:** JS3
 
 The JS2 agent collects from four boards on two job systems. This layer decides **what reaches
 me and why**: a scored filter that is a document (`FILTER.md`) with every added, cut and rejected
