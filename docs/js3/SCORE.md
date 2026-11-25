@@ -45,8 +45,56 @@ directory with no tools, through the JS1 judge path.
 
 ## 3. Results
 
-Pending: filled in from `data/js3/experiments/` after the runs.
+All runs on 2026-11-25 (UTC 05:5x), after the predictions above were committed (`5448d94`).
+Files: `data/js3/experiments/e1-e2-filter.json`, `e3-full.json`, `e3-trunc1500.json`; each E3
+call's full attempt log (argv, raw stdout, cost) under `data/js3/experiments/e3-*/calls/`.
+
+| ID | Change | Held-out agreement (10) | Tuning agreement (15) | Prediction held? |
+|---|---|---:|---:|---|
+| baseline | FILTER v0.1 | 9/10 | 11/15 | — |
+| E1a | v0.1 → v0.2 (cut "api") | 9/10 → 9/10, no decision changed | 11 → 11 | Yes |
+| E1b | v0.2 → v0.3 (R2 blockers) | 9/10 → 9/10, no decision changed | 11 → 12 (8075570 "Integration Engineer, Professional Services" now rejected, as labelled) | Yes (0 changes, at most 1 predicted) |
+| E2 | threshold 7 → 6 on v0.3 | 9/10 → 9/10 | 12 → 12 | Yes, at the "stays the same" end: no labelled posting scores exactly 6 |
+| E3 | judge v2, full content → first 1,500 characters | **10/10 → 7/10** (all 20 replies valid) | not run | Yes: all three misses are MATCH postings judged NOT_RELEVANT (8039548, 8206731, 8267736) |
+
+**The one held-out disagreement in E1/E2 is by design, not a bug.** 8194606 ("Frontend Engineer,
+Data Product Experiences", location "N/A") is NO_MATCH under the JS1 rule because the location is
+not established; FILTER.md §1 R6 gives an unknown location 0 instead of a veto, so the filter keeps
+it (score 8) and the claim checker then says "I cannot tell" on C3. The labels measure distance
+from the JS1 rule, and this is a place where the JS3 filter chose to differ. The three tuning
+disagreements left (7476555, 8127182, 8234357) are the same choice (mixed or N/A location) or the
+topic word standing in for a second skill.
+
+**E1 and E2 barely move the held-out number because the held-out set is small and was drawn for
+a different question.** All 10 are Stripe postings, mostly with role-phrase titles; the v0.2/v0.3
+changes act on generic titles at other boards. On the full corpus the same changes flipped 12
+postings (FILTER.md §8). Ten labels cannot show that effect, in either direction. The audit
+verdicts, once written, measure it on the flipped postings directly
+([`audit/AUDIT_REPORT.md`](audit/AUDIT_REPORT.md), "The v0.2/v0.3 changes, judged").
+
+**E3: what changed and what did not.** Same prompt file (SHA-256 `effb1d0b…`), same model
+(`claude-sonnet-5-5` served on all 20 calls), same résumé, same postings; only the posting content
+in the context was cut. The cut saved about 10% of input tokens (71,228 → 63,902 across the 10
+calls; $0.324 → $0.276) and cost three of ten answers. In two of the three truncated misses Claude saw the
+problem and said so in `uncertainties` — "The content is truncated mid-sentence, so required
+technologies or exclusion phrases may exist in the missing text" (8039548; similar for 8206731) —
+and still answered NOT_RELEVANT, because the v2 prompt offers no "cannot tell" label. In the third
+(8267736) it did not mention the cut at all; it counted the one skill it could see (AWS). The skill lists sit after the
+first 1,500 characters (Stripe's company boilerplate fills the start), so the skill gate failed on
+text Claude never received. A context change moved the score more than any filter change, without
+touching a word of the prompt.
 
 ## 4. What persistence is not proof of
 
-Pending.
+Several things in this project persist across sessions: the agent's seen-ID state
+(`data/*/state.json`), `FILTER.md` and its frozen versions, the prompt files, the saved raws, and,
+in the Claude Code sessions that built it, memory files that a new session reads at start. When
+behaviour changes from one session to the next (65 postings kept on one day, 53 later; a different
+Claude answer on a re-run), the cause is one of those files, the context, or the model service,
+never training on my labels. **Nothing in this project trained a model.** `claude-sonnet-5-5`'s
+weights were the same for every call; the judge runs with `--no-session-persistence` from an empty
+folder, so no call sees another. The filter's "learning" from v0.1 to v0.3 is two edited lines in a
+text file, made by Claude after counting, and it can be undone by restoring the file. The reverse
+also holds: the same files can give a different answer on another day if the served model changes,
+which is why every call records `model_served` and `claude_version`. A behaviour that persists is
+evidence that a file persisted, not that anything learned.
