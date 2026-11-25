@@ -1,6 +1,6 @@
 # FILTER.md — Job-Search Agent 3: the filter, the evidence rules, and the score
 
-**Version:** v0.1, 2026-11-25, written before any JS3 code. **Status: Claude's draft, not yet
+**Version:** v0.2, 2026-11-25 (v0.1 written before any JS3 code; changes in §8). **Status: Claude's draft, not yet
 adopted.** Shubham reviews it, changes what he disagrees with, and adopts it as v1.0 (as with
 `GATE.md` in JS2). Until then every number below is Claude's proposal.
 **Persona:** Kiran Joshi (fictional), the same as in `CONTRACT.md` and `GATE.md`.
@@ -20,7 +20,7 @@ board, or Claude.
 
 <!-- filter:begin -->
 ```toml
-version = "0.1"
+version = "0.2"
 threshold = 7
 
 [title]
@@ -36,7 +36,7 @@ per_skill = 1                # R4
 cap = 3
 
 [topic]
-words = ["api", "apis", "web application", "web applications", "backend", "back-end",
+words = ["web application", "web applications", "backend", "back-end",
          "frontend", "front-end", "full-stack", "full stack", "distributed systems",
          "microservices"]
 weight = 1                   # R5 (once, however many words appear)
@@ -57,7 +57,7 @@ weight = -10                 # R7
 | R2 generic role word | Title contains the whole word "engineer" or "developer" but no R1 phrase | +2 | Titles like "Product Engineer" or "Engineer, Payments" can be the same job under a different name, so they get a chance but must earn the rest from the text. |
 | R3 seniority marker | Title contains a §6.1 marker as a whole word (senior, staff, lead, intern, …) | −10 | Kiran targets new-grad to SWE II; a senior or intern title is a different job however well the stack matches, so this is a veto. |
 | R4 résumé skills | Distinct skills from the seven §4 résumé skill arrays found in the title, content or departments with the §6.2 matching (whole words, the special cases for C#, React, REST, …) | +1 each, at most 3 | Shared stack is evidence Kiran could do the work; the cap stops a long technology list from outweighing the title. |
-| R5 topic words | Any of the listed topic words as a whole word in the cleaned content | +1 once | These words describe the kind of engineering Kiran has done (APIs, web apps, backend, distributed systems); once is enough to show the topic, more would reward wordiness. |
+| R5 topic words | Any of the listed topic words as a whole word in the cleaned content | +1 once | These words describe the kind of engineering Kiran has done (web apps, backend, distributed systems); once is enough to show the topic, more would reward wordiness. "api"/"apis" were cut in v0.2 (§8). |
 | R6 location | The CONTRACT §6.4 location label of `location.name` (with the US-only rescue phrases) | US +1, unknown 0, non-US −10 | Kiran can only work in the US; an unknown location is not a reason to drop a posting, only to say "I cannot tell" later. |
 | R7 exclusion phrase | Any CONTRACT §6.3 phrase (citizenship, clearance, unpaid) in title or content | −10 | Kiran is excluded by these terms outright, so this is a veto. |
 | Threshold | Keep at score ≥ 7 | 7 | A role phrase (4) plus two skills (2) plus a US location (1) is the CONTRACT §6 bar; anything weaker must make it up with a third skill or the topic. |
@@ -192,4 +192,5 @@ shown beside the record.
 
 | Version | Date | Change | Why | Measured |
 |---|---|---|---|---|
-| v0.1 | 2026-11-25 | First draft (Claude) | §1 reasons | Not yet: written before the code |
+| v0.1 | 2026-11-25 | First draft (Claude) | §1 reasons | Not yet: written before the code. On the full corpus (1,235 postings): 65 kept |
+| v0.2 | 2026-11-25 | **Cut** "api" and "apis" from R5 | **False friend.** At Stripe, an API company, "API" appears in sales and product postings because of what the company sells, not what the job builds: "preferably at an API-first company", "Ability to understand the Stripe API" (Account Executive postings). 193 of the 984 postings with no role word in the title got R5 from "api"/"apis" alone | Flips 8 kept → rejected, every one a generic-title specialty job held up by R5 (Infrastructure Engineer, Privy; Cloud Security Engineer; Security Engineer, Privy ×2; Solutions Engineer, AI Build Team; Partner Solutions Engineer; Compliance Engineer; Data & Integration Engineer). No role-phrase title flips. 57 kept |
