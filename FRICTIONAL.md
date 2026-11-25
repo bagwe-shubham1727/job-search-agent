@@ -2,7 +2,78 @@
 
 ## Job-Search Agent 3
 
-[Shubham: your dated JS3 entries, in your own words]
+**Student:** Shubham Bagwe  
+**Written:** November 25, 2026  
+
+This section records six episodes where the Job-Search Agent 3 build, evaluation results, external tools, and my own assumptions pushed back. It distinguishes what the evidence established from the decisions I made and the questions that remain open.
+
+### 1. The blind audit: discovering where the filter gets it wrong
+
+**Date:** November 25, 2026  
+**Trace:** Blind audit of 78 postings; commits `cc0b7d0`, `c0a270e`.
+
+* **What happened:** I hand-judged all 78 postings without looking at their scores. Among 40 randomly sampled rejects, none were relevant. However, 4 of the 8 closest rejects were relevant. Among 12 randomly sampled kept postings, 9 were not relevant under v0.3.
+* **What I found:** The filter performed reasonably on random rejects but struggled around the decision boundary. The closest rejects revealed that some potentially useful opportunities were being filtered out, while the random kept sample showed that a high score did not guarantee relevance.
+* **What I decided:** I reviewed the results against my own judgments and used the audit to identify weaknesses rather than treating the scoring system as ground truth.
+* **My reflection:** The hardest postings were those where the technical requirements matched but the location or experience requirements were unclear. I marked three as `CANNOT_TELL` because I did not have enough evidence to make a confident decision. What surprised me most was that 4 of the 8 closest rejects were relevant, showing how easily the threshold could eliminate opportunities worth considering.
+* **Still unresolved:** Zero relevant postings among 40 random rejects cannot establish that the filter missed none. The approximate upper bound is 8.8%, which could represent around 100 postings out of 1,170.
+
+### 2. Catching the years-of-experience mix-up in my own judgments
+
+**Date:** November 25, 2026  
+**Trace:** Blind audit verdict review; commit `cc0b7d0`.
+
+* **What happened:** While reviewing my own verdict reasons, I noticed that two entries described Kiran as having approximately 3 years of experience, even though the fictional persona specifies 4 years (August 2020 to December 2024).
+* **What I decided:** I corrected both reasons to reflect the actual persona information.
+* **My reflection:** The 3 years came from my rough memory of Kiran's résumé. I did not recheck the persona file until the review caught the mistake. It reminded me that I need to verify my own judgments just as carefully as I verify Claude's output.
+* **Still unresolved:** The correction fixes the two identified reasons, but it does not establish that every other judgment is free from similar mistakes.
+
+### 3. Discovering that the relevance filter keeps too much
+
+**Date:** November 25, 2026  
+**Trace:** v0.3 filter evaluation and blind audit.
+
+* **What happened:** Most incorrectly retained postings requested 5+ years of experience, but years of experience was not an explicit filter rule. Only claim C4 reports experience requirements.
+* **What I found:** Four postings I would personally want to consider fell one point below the threshold of 7: Fraud & Identity, Linear Product Engineer, Applied AI Fullstack, and Backend Accounts Receivable.
+* **What I considered:** Two possible changes were adding an explicit years-of-experience rule or lowering the relevance threshold.
+* **What I decided:** I did not make either change before the deadline. Changing the rules based on the same audit used to evaluate them could make the evaluation less independent.
+* **My reflection:** Adding a years-of-experience rule might reduce irrelevant results, but lowering the threshold could recover opportunities that are currently being missed. I decided not to make either change because I did not have enough independent evaluation data, and tuning against my own audit could make the results look better without actually improving the filter.
+* **Still unresolved:** Neither change has been implemented or independently measured.
+
+### 4. Making trust decisions about the MCP server and Playwright
+
+**Date:** November 25, 2026  
+**Trace:** `TOOL_SERVER.md`; trust assessment commits `4690c1f`, `3f15386`.
+
+* **What happened:** I evaluated whether I would trust the MCP server built for the project and whether I would allow an external Playwright MCP server to operate on my machine.
+* **What I decided:** I accepted our own server for one use, local only. I did not grant the same trust to Playwright.
+* **What concerned me:** Playwright exposed tools such as `browser_fill_form` and `browser_click`, which could potentially submit job applications or perform actions on my behalf. It also ran using `@latest`, making the installed version less predictable. Its screenshot tool was described as read-only but also wrote files.
+* **My reflection:** I was more comfortable with our own server because its purpose and behavior were limited and easier to inspect. However, even our server writes transcript files, so local-only access and limited use were important boundaries. Playwright had broader browser control and could take actions with real consequences, so I was not comfortable granting it that level of access.
+* **Still unresolved:** The Playwright decision was based on reviewing its tool list and source code. I never actually ran it, so the assessment was not based on runtime testing.
+
+### 5. Choosing not to re-fetch live postings before the deadline
+
+**Date:** November 25, 2026  
+**Trace:** Live-fetch decision and link check; commit `71933f5`.
+
+* **What happened:** I questioned whether the assignment required a fresh fetch of job postings. After reviewing the requirements, I concluded that it did not.
+* **What I decided:** I chose not to run `jsa watch run` again before the deadline because doing so would have changed the numbers recorded across five documents and required updating the corresponding evidence.
+* **What the link check found:** Out of 53 posting links, 36 were still listed. Two postings had already left their respective boards before the newest data was collected but remained in the corpus.
+* **My reflection:** I think skipping the fresh fetch was the right trade-off because the assignment did not require another run, and changing the dataset at the last minute would have meant reconciling evidence across multiple documents. However, 36 of 53 still listed means the shortlist cannot be treated as entirely current. I would still need to verify individual postings before applying.
+* **Still unresolved:** Being listed on a company's career board does not prove that a posting is still accepting applications or that the role remains available.
+
+### 6. Understanding the difference between relevance and evidence entailment
+
+**Date:** November 25, 2026  
+**Trace:** Filter scoring and claim-checker evaluation.
+
+* **What happened:** During evaluation, I encountered examples where a posting's relevance score and its actual requirements did not tell the same story.
+* **What I found:** The Figma "Distributed Systems" posting received the maximum score of 9 despite requiring 5+ years of experience. A New Grad posting capped experience at 18 months, which the existing rule did not catch. Claude also repeated the rule's "I cannot tell" conclusion through the tool.
+* **What I learned:** A keyword score measures how closely a posting matches the filter's selected signals. It does not establish whether the candidate actually meets the employer's requirements. Similarly, a claim checker must distinguish what the posting explicitly supports from what cannot be established.
+* **My reflection:** A keyword score cannot decide whether a job is worth my time because matching technologies and titles does not establish eligibility. I need to look at experience requirements, location, and other actual conditions before deciding whether to apply. Claude can help organize the evidence, but the final judgment should remain mine.
+* **Still unresolved:** The scoring system does not independently establish eligibility, and the experience-related limitations remain part of the evaluation.
+
+**Overall reflection:** Job-Search Agent 3 showed me that building a working agent and trusting its decisions are two different things. The blind audit exposed mistakes that were not obvious from scores alone, while the MCP review forced me to think about what actions I was actually willing to delegate. The remaining gaps also reminded me that a passing evaluation does not mean the system is ready to make every decision without human judgment.
 
 ## Job-Search Agent 2
 
