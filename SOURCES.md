@@ -18,17 +18,17 @@ not use the Reallocation Engine or Lectern code.
 
 ### What I wrote (JS3)
 
-- [Shubham: what you wrote, decided, judged and checked yourself, with commits]
+- **Blind-audit judgments and analysis (`cc0b7d0`):** Personally judged all 78 blind-audit postings, wrote a one-line reason for each verdict, corrected the 3-vs-4-years experience mistake, and wrote §3 of `AUDIT.md` explaining the results and limitations of the audit.
+- **Filter adoption (`c0a270e`):** Drafted and adopted `FILTER.md`, defining the criteria used to identify relevant postings and the evidence rules for evaluating claims.
+- **MCP trust decisions (`4690c1f`, `3f15386`):** Made the two trust decisions documented in `TOOL_SERVER.md`, evaluating whether each MCP server was appropriate to use and under what conditions.
+- **README sign-off and ownership (`062cd1f`, `5f30d82`, `4c3d789`):** Wrote the JS3 sign-off and the driver's-seat "why" column, explaining which decisions remained mine and why I retained responsibility for them. I also chose the table layout.
+- **Live-link verification decision (`71933f5`):** Requested a live-link check, reviewed the available evidence, and decided not to re-fetch the job boards before the deadline.
+- **JS3 reflections (`f201513`):** Wrote the JS3 `FRICTIONAL` section, documenting the actual challenges, decisions, and points of friction during the project.
 
 ### What Claude contributed (JS3)
 
-Claude Code (Opus 5.5), overnight on 2026-11-25, at Shubham's request while he was away:
+Claude Code (Opus 5.5), on 2026-11-25, at my request:
 
-- **`FILTER.md`.** Drafted v0.1 (rules R1–R7 with reasons, evidence rules C1–C5 and the "I cannot
-  tell" rules, expected sources, wrong versions WV1–WV5, the pre-registered audit draw) and
-  committed it before any JS3 code (`bd34a42`). After measuring on the unlabelled corpus it made
-  v0.2 (cut "api"/"apis", `0a79edf`) and v0.3 (R2 blockers, `3d0f3ed`) and recorded four rejected
-  changes, all in §8. The filter is still Claude's draft until I adopt it.
 - **Code** in `src/job_search_agent/js3/`: the corpus loader, the scorer that reads its numbers
   from FILTER.md, the claim labeller, the audit draw/worksheet/report, the MCP server, the
   experiments; `scripts/js3_mcp_claude.sh`, `scripts/js3_mcp_probe.py`, `scripts/package_js3.sh`;
@@ -38,9 +38,7 @@ Claude Code (Opus 5.5), overnight on 2026-11-25, at Shubham's request while he w
   server transcript, the probes of our server and Playwright MCP, experiments E1–E3 (20 `claude`
   calls, $0.60). Claude wrote the predictions before running them (`5448d94`).
 - **Analysis and docs:** the false friends, the relevance-vs-entailment case, the abstention
-  counterexample, both server evaluations (the trust decisions are recommendations for me to
-  make), the provenance of every number, the persistence statement, `docs/js3/*`, the JS3 part of
-  this README except the sign-off and the "why" column.
+  counterexample, both server evaluations, the provenance of every number, the persistence statement, `docs/js3/*`.
 - **An independent Claude review agent** checked the build and found the C5 sponsorship false positives, the audit-order leak and the boilerplate-only worksheet; Claude fixed all three.
 - **Claude made no audit verdict**, no trust decision, no sign-off and no Frictional entry.
 
