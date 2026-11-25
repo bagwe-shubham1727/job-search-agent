@@ -4,7 +4,8 @@ Used to evaluate a tool server the way a client sees it, ours or someone else's.
 line, both directions, is written with a UTC time to data/js3/mcp/<name>.jsonl.
 
 Usage:
-  python scripts/js3_mcp_probe.py <name> [--call TOOL JSON_ARGS] [--raw JSON_LINE ...] -- CMD...
+  python scripts/js3_mcp_probe.py <name>
+      [--call TOOL JSON_ARGS] [--raw JSON_LINE ...] -- CMD...
 """
 
 from __future__ import annotations
@@ -25,21 +26,38 @@ def main() -> int:
     cut = argv.index("--")
     parser = argparse.ArgumentParser()
     parser.add_argument("name")
-    parser.add_argument("--call", nargs=2, action="append", default=[], metavar=("TOOL", "ARGS"))
-    parser.add_argument("--raw", action="append", default=[], help="extra raw line, sent after the calls")
+    parser.add_argument(
+        "--call", nargs=2, action="append", default=[], metavar=("TOOL", "ARGS")
+    )
+    parser.add_argument(
+        "--raw",
+        action="append",
+        default=[],
+        help="extra raw line, sent after the calls",
+    )
     args = parser.parse_args(argv[:cut])
     out = ROOT / "data" / "js3" / "mcp" / f"{args.name}.jsonl"
     if out.exists():
         print(f"{out.relative_to(ROOT)} exists", file=sys.stderr)
         return 2
     out.parent.mkdir(parents=True, exist_ok=True)
-    proc = subprocess.Popen(argv[cut + 1 :], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)  # noqa: S603
-    assert proc.stdin and proc.stdout
+    proc = subprocess.Popen(  # noqa: S603 - runs the command the user typed after --
+        argv[cut + 1 :],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+    assert proc.stdin and proc.stdout  # noqa: S101 - narrows types; PIPE sets both
 
     def log(direction: str, line: str) -> None:
         with out.open("a", encoding="utf-8") as fh:
             stamp = datetime.now(UTC).isoformat(timespec="milliseconds")
-            fh.write(json.dumps({"utc": stamp, "dir": direction, "line": line}, ensure_ascii=False) + "\n")
+            fh.write(
+                json.dumps(
+                    {"utc": stamp, "dir": direction, "line": line}, ensure_ascii=False
+                )
+                + "\n"
+            )
 
     def send(line: str, expect_reply: bool) -> None:
         log("client->server", line)
@@ -63,7 +81,14 @@ def main() -> int:
             body["params"] = params
         send(json.dumps(body), True)
 
-    request("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "js3-probe", "version": "0.1"}})
+    request(
+        "initialize",
+        {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": {"name": "js3-probe", "version": "0.1"},
+        },
+    )
     send(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}), False)
     request("tools/list")
     for tool, raw_args in args.call:

@@ -27,7 +27,9 @@ EXPECTED_BOARDS: tuple[str, ...] = (
 
 EXCLUDED_BOARDS: dict[str, str] = {
     "ashby/linearapp": "deliberate 404 in JS2 (GATE §5); not a real board",
-    "greenhouse/ramp": "stale wrong board in JS2 (FINISHED_WRONG.md); Ramp hires on Ashby",
+    "greenhouse/ramp": (
+        "stale wrong board in JS2 (FINISHED_WRONG.md); Ramp hires on Ashby"
+    ),
 }
 
 HANDCHECK_RAW = "evidence/handcheck/stripe-jobs-2026-10-29T22-41-31Z.json"
@@ -113,7 +115,10 @@ def load_corpus(root: Path, boards: tuple[str, ...] = EXPECTED_BOARDS) -> Corpus
 
 
 def load_inputs(root: Path) -> RuleInputs:
-    """The persona's roles and skills, through the pinned-hash résumé gate (CONTRACT §12)."""
+    """The persona's roles and skills.
+
+    Read through the pinned-hash résumé gate (CONTRACT §12).
+    """
     config = load_config(root / "config" / "agent.toml")
     resume = load_verified_resume(
         config.resume_path, config.resume.pinned_sha256, project_root=root

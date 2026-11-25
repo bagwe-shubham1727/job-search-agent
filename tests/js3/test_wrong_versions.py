@@ -1,4 +1,6 @@
-"""FILTER.md §4: the real code passes every check; each wrong version fails its named check.
+"""FILTER.md §4: the real code passes every check.
+
+Each wrong version fails its named check.
 
 Each implementation is three callables: ``kept(posting)``, ``skills(posting)`` (credited
 résumé terms) and ``labels(posting)`` (claim id -> label for C3 and C5).
@@ -70,14 +72,17 @@ WRONG: dict[str, Impl] = {
 def check_role_words_read_title_only(impl: Impl) -> None:
     p = posting(
         "Account Executive",
-        "You will partner with our software engineer and backend engineer teams. Java, Python, SQL, distributed systems."
-        + FILLER,
+        "You will partner with our software engineer and backend engineer teams. "
+        "Java, Python, SQL, distributed systems." + FILLER,
     )
     assert not impl["kept"](p)
 
 
 def check_seniority_vetoes_any_skill_count(impl: Impl) -> None:
-    many = "TypeScript JavaScript Java Python SQL GraphQL PostgreSQL Redis Kafka AWS Docker Kubernetes"
+    many = (
+        "TypeScript JavaScript Java Python SQL GraphQL PostgreSQL Redis Kafka AWS "
+        "Docker Kubernetes"
+    )
     assert not impl["kept"](posting("Staff Software Engineer", many + FILLER))
 
 

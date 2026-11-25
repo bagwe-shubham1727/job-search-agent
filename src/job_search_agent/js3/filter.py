@@ -92,7 +92,10 @@ def load_filter(path: Path) -> FilterSpec:
 
 
 def whole_words(words: tuple[str, ...]) -> re.Pattern[str] | None:
-    """Case-insensitive pattern for any of ``words`` with no letter or digit around it."""
+    """Case-insensitive pattern for any of ``words``.
+
+    A match has no letter or digit around it.
+    """
     if not words:
         return None
     alts = "|".join(r"\s+".join(map(re.escape, w.split())) for w in words)

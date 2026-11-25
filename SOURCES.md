@@ -1,5 +1,48 @@
 # Sources
 
+## Job-Search Agent 3 — the filter, the tool, and the score
+
+**Started from:** my own Job-Search Agent 2 (this repository, through commit `150a8f6`). I did
+not use the Reallocation Engine or Lectern code.
+
+### External sources (JS3)
+
+| Source | Used for |
+|---|---|
+| [JS3 assignment](https://github.com/nikbearbrown/info-7375-prompt-engineering-for-generative-ai/blob/main/assignments/assignment-js3-the-filter-the-tool-and-the-score.md) and the course AI policy | The requirements |
+| The saved raw responses from JS1 and JS2 (Greenhouse `stripe`, `figma`; Ashby `ramp`, `linear`) | The corpus. No board was fetched for JS3 |
+| Model Context Protocol specification (modelcontextprotocol.io), revisions 2024-11-05 to 2025-11-25 | The message shapes the server implements (from Claude's knowledge of the spec; no SDK and no copied code) |
+| Microsoft Playwright MCP, `@playwright/mcp` 0.0.86 (github.com/microsoft/playwright-mcp), already in the local npx cache | The second server evaluated: its `tools/list` and its bundled source were read |
+| Claude Code 2.1.330 (`claude` CLI), model `claude-sonnet-5-5` | The MCP client in the transcript, and the judge in experiment E3 |
+| Python standard library; the JS1/JS2 toolchain (`httpx`, `pydantic`; `pytest`, `ruff`, `mypy`; `uv`) | No new dependency |
+
+### What I wrote (JS3)
+
+- [Shubham: what you wrote, decided, judged and checked yourself, with commits]
+
+### What Claude contributed (JS3)
+
+Claude Code (Opus 5.5), overnight on 2026-11-25 at my request, while I was away:
+
+- **`FILTER.md`.** Drafted v0.1 (rules R1–R7 with reasons, evidence rules C1–C5 and the "I cannot
+  tell" rules, expected sources, wrong versions WV1–WV5, the pre-registered audit draw) and
+  committed it before any JS3 code (`bd34a42`). After measuring on the unlabelled corpus it made
+  v0.2 (cut "api"/"apis", `0a79edf`) and v0.3 (R2 blockers, `3d0f3ed`) and recorded four rejected
+  changes, all in §8. The filter is still Claude's draft until I adopt it.
+- **Code** in `src/job_search_agent/js3/`: the corpus loader, the scorer that reads its numbers
+  from FILTER.md, the claim labeller, the audit draw/worksheet/report, the MCP server, the
+  experiments; `scripts/js3_mcp_claude.sh`, `scripts/js3_mcp_probe.py`, `scripts/package_js3.sh`;
+  the tests in `tests/js3/`. A separate Claude agent fixed lint and types without changing
+  behaviour.
+- **Runs:** the filter on all 1,235 postings, the audit draw, the shortlist, the Claude Code ↔
+  server transcript, the probes of our server and Playwright MCP, experiments E1–E3 (20 `claude`
+  calls, $0.60). Claude wrote the predictions before running them (`5448d94`).
+- **Analysis and docs:** the false friends, the relevance-vs-entailment case, the abstention
+  counterexample, both server evaluations (the trust decisions are recommendations for me to
+  make), the provenance of every number, the persistence statement, `docs/js3/*`, the JS3 part of
+  this README except the sign-off and the "why" column.
+- **Claude made no audit verdict**, no trust decision, no sign-off and no Frictional entry.
+
 ## Job-Search Agent 2 — the loop, the tools, and the diff
 
 **Started from:** my own Job-Search Agent 1 (this repository, through commit `4b6c80f`). I did

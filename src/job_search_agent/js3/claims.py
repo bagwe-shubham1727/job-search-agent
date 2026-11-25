@@ -14,12 +14,14 @@ from typing import Any
 from job_search_agent.js3.filter import Scored
 from job_search_agent.models import LocationLabel
 from job_search_agent.rule.exclusions import phrases_in_text
+from job_search_agent.rule.skills import _pattern  # same §6.2 pattern the filter used
 from job_search_agent.text import clean_html
 
 SUPPORTED, CONTRADICTED, INSUFFICIENT = "supported", "contradicted", "insufficient"
 
 KIRAN_YEARS = 4
-"""FILTER.md §2 C4: résumé experience 2020-08..2022-08 and 2022-09..2024-12, 52 months."""
+"""FILTER.md §2 C4: résumé experience 2020-08..2022-08 and 2022-09..2024-12,
+52 months."""
 
 MIN_CONTENT_CHARS = 200
 """FILTER.md §2 rule 3: below this the agent cannot tell anything but the title."""
@@ -33,9 +35,12 @@ _YEARS = re.compile(
 )
 _SPONSOR_NO = re.compile(
     r"\b(?:unable|not able) to (?:provide |offer )?(?:visa |immigration )?sponsor"
-    r"|\b(?:will|do|does|can|could|is|are) not (?:be )?(?:provide |offer |able to )?(?:visa |immigration )?sponsor"
-    r"|\b(?:cannot|can't|won't|don't|doesn't) (?:provide |offer )?(?:visa |immigration )?sponsor"
-    r"|\bwithout (?:the need for |requiring )?(?:current or future )?(?:visa |employer |immigration )?sponsorship"
+    r"|\b(?:will|do|does|can|could|is|are) not (?:be )?"
+    r"(?:provide |offer |able to )?(?:visa |immigration )?sponsor"
+    r"|\b(?:cannot|can't|won't|don't|doesn't) (?:provide |offer )?"
+    r"(?:visa |immigration )?sponsor"
+    r"|\bwithout (?:the need for |requiring )?(?:current or future )?"
+    r"(?:visa |employer |immigration )?sponsorship"
     r"|\bnot (?:eligible for|offering|provide) (?:visa |immigration )?sponsorship"
     r"|\bno (?:visa |immigration )?sponsorship",
     re.IGNORECASE,
@@ -44,7 +49,8 @@ _SPONSOR_YES = re.compile(
     r"\bvisa sponsorship (?:is )?(?:available|offered|provided)"
     r"|\bsponsorship (?:is )?available"
     r"|\bwill sponsor\b"
-    r"|\b(?:we|stripe|figma|ramp|linear) (?:can |do |does |will )?(?:offer |provide )?(?:visa )?sponsor",
+    r"|\b(?:we|stripe|figma|ramp|linear) (?:can |do |does |will )?"
+    r"(?:offer |provide )?(?:visa )?sponsor",
     re.IGNORECASE,
 )
 
@@ -133,7 +139,8 @@ def _role(s: Scored) -> Claim:
             INSUFFICIENT,
             "$.title",
             title,
-            f"only the generic word '{s.generic_word}': I cannot tell which kind of engineering",
+            f"only the generic word '{s.generic_word}': "
+            "I cannot tell which kind of engineering",
         )
     return Claim(
         "C1", statement, CONTRADICTED, "$.title", title, "no role word in the title"
@@ -146,10 +153,6 @@ def _skills(s: Scored) -> list[Claim]:
     fields |= {
         f"$.departments[{i}].name": d for i, d in enumerate(s.posting.department_names)
     }
-    from job_search_agent.rule.skills import (
-        _pattern,
-    )  # same §6.2 pattern the filter used
-
     for ev in s.skills:
         text = clean_html(fields.get(ev.posting_path, ""))
         m = _pattern(ev.term).search(text)
@@ -211,7 +214,10 @@ def _experience(s: Scored) -> Claim:
 
 
 def _authorization(s: Scored) -> Claim:
-    statement = "The posting's terms do not rule out a candidate on F-1/OPT who will need sponsorship."
+    statement = (
+        "The posting's terms do not rule out a candidate on F-1/OPT "
+        "who will need sponsorship."
+    )
     no: tuple[str, str] | None = None
     yes: tuple[str, str] | None = None
     for sentence in segments(s.posting.content_raw):
@@ -254,7 +260,8 @@ def _authorization(s: Scored) -> Claim:
         INSUFFICIENT,
         None,
         None,
-        "I cannot tell: the text says nothing about sponsorship, citizenship or clearance",
+        "I cannot tell: the text says nothing about sponsorship, "
+        "citizenship or clearance",
     )
 
 
@@ -290,13 +297,17 @@ def justify(s: Scored) -> Justification:
             True,
         )
     elif contradicted:
-        answer = f"Matches the filter, but the posting's text contradicts {', '.join(contradicted)}."
+        answer = (
+            "Matches the filter, but the posting's text contradicts "
+            f"{', '.join(contradicted)}."
+        )
         abstained = bool(unsure)
         if unsure:
             answer += f" I cannot tell on: {', '.join(unsure)}."
     elif unsure:
         answer, abstained = (
-            f"Matches the filter; I cannot tell whether it fits on: {', '.join(unsure)}.",
+            "Matches the filter; I cannot tell whether it fits on: "
+            f"{', '.join(unsure)}.",
             True,
         )
     else:

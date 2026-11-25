@@ -27,8 +27,8 @@ def test_all_supported_says_it_fits() -> None:
         scored(
             posting(
                 "Software Engineer",
-                "3+ years of experience with Java and SQL. Visa sponsorship is available."
-                + FILLER,
+                "3+ years of experience with Java and SQL. "
+                "Visa sponsorship is available." + FILLER,
             )
         )
     )
@@ -73,7 +73,10 @@ def test_no_sponsorship_contradicts() -> None:
 
 
 def test_both_ways_is_insufficient() -> None:
-    text = "Java and SQL. We will sponsor H-1B transfers. We cannot sponsor new OPT candidates."
+    text = (
+        "Java and SQL. We will sponsor H-1B transfers. "
+        "We cannot sponsor new OPT candidates."
+    )
     assert _labels("Software Engineer", text)["C5"] == INSUFFICIENT
 
 
@@ -108,10 +111,12 @@ def test_years_outside_an_experience_sentence_are_ignored() -> None:
 
 
 def test_limit_a_ceiling_is_invisible() -> None:
-    # Stripe "Software Engineer, New Grad": Kiran's 4 years exceed this cap, yet C4 abstains.
+    # Stripe "Software Engineer, New Grad": Kiran's 4 years exceed this cap,
+    # yet C4 abstains.
     assert (
         stated_minimum_years(
-            "<li>New grad candidates should have no more than 18 months of professional experience</li>"
+            "<li>New grad candidates should have no more than 18 months "
+            "of professional experience</li>"
         )
         is None
     )

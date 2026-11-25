@@ -28,7 +28,10 @@ def posting(
     location: str | None = "Seattle, WA",
     departments: tuple[str, ...] = (),
 ) -> Posting:
-    """A Greenhouse-shaped posting; ``content`` is plain text, escaped like the API does."""
+    """A Greenhouse-shaped posting.
+
+    ``content`` is plain text, escaped like the API does.
+    """
     raw: dict[str, object] = {
         "id": 1,
         "title": title,
@@ -53,6 +56,6 @@ def scored(p: Posting, s: FilterSpec | None = None) -> Scored:
 
 
 FILLER = (
-    " We build reliable systems for millions of users and care about craft, testing and clear writing."
-    * 3
+    " We build reliable systems for millions of users"
+    " and care about craft, testing and clear writing." * 3
 )

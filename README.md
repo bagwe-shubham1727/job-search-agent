@@ -1,4 +1,109 @@
-# Job-Search Agent 2 — The Loop, the Tools, and the Diff
+# Job-Search Agent 3 — The Filter, the Tool, and the Score
+
+**Student:** Shubham Bagwe · **Course:** INFO 7375 — Prompt Engineering for Generative AI (Northeastern University) · **Instructor:** Nik Bear Brown · **Assignment:** JS3, due 2026-11-23 (this work is dated 2026-11-25)
+
+The JS2 agent collects from four boards on two job systems. This layer decides **what reaches
+me and why**: a scored filter that is a document (`FILTER.md`) with every added, cut and rejected
+word recorded and measured; a claim checker that labels every statement the agent makes about a
+kept posting as supported, contradicted or insufficient against the posting's own text; the agent
+offered to Claude as a tool through a Model Context Protocol server written from scratch; and an
+account of every number in the scorer, with one change at a time measured on held-out labels. It
+is still discovery only: the agent never applies, emails, messages or logs in, and the tool server
+can only read. The résumé is still the fictional persona Kiran Joshi.
+
+**Started from:** my own JS2 agent (this repository through `150a8f6`), not the Reallocation
+Engine or Lectern. **Start here:** [`FILTER.md`](FILTER.md), committed in `bd34a42` before any
+JS3 code.
+
+| Deliverable | Where |
+|---|---|
+| The gate: the filter as a versioned document, evidence rules, expected sources, wrong versions | [`FILTER.md`](FILTER.md) (v0.1 → v0.3; frozen copies in `experiments/js3/filters/`) |
+| The filter run, false friends, every rule added/cut/rejected | [`docs/js3/AUDIT.md`](docs/js3/AUDIT.md), FILTER.md §8 |
+| The reject audit: blind worksheet, draw, and report from my verdicts | [`docs/js3/audit/WORKSHEET.md`](docs/js3/audit/WORKSHEET.md), `data/js3/audit/draw.json`, [`docs/js3/audit/AUDIT_REPORT.md`](docs/js3/audit/AUDIT_REPORT.md) |
+| Source-grounded shortlist with every claim labelled | [`docs/js3/SHORTLIST.md`](docs/js3/SHORTLIST.md), `data/js3/shortlist.json` |
+| Relevance vs entailment, the abstention rule and its counterexample | [`docs/js3/SHORTLIST_NOTES.md`](docs/js3/SHORTLIST_NOTES.md) |
+| The tool server, its transcripts, and both evaluations | [`src/job_search_agent/js3/mcp_server.py`](src/job_search_agent/js3/mcp_server.py), `data/js3/mcp/`, [`docs/js3/TOOL_SERVER.md`](docs/js3/TOOL_SERVER.md) |
+| What moves the score: origin of every number, one change at a time | [`docs/js3/SCORE.md`](docs/js3/SCORE.md), `data/js3/experiments/` |
+| Sign-off and driver's seat | [below](#sign-off--job-search-agent-3) |
+| Sources, Frictional | [`SOURCES.md`](SOURCES.md), [`FRICTIONAL.md`](FRICTIONAL.md) |
+
+## Language and toolchain
+
+| | |
+|---|---|
+| Language | Python ≥ 3.12 (run on 3.14.5) |
+| Package manager | `uv` 0.11.0; dependencies pinned in `uv.lock` |
+| Runtime libraries | `httpx`, `pydantic` (no new dependency in JS3; the MCP server uses only the standard library) |
+| Dev tools | `pytest`, `ruff`, `mypy --strict` |
+| Model | `claude-sonnet-5-5` through the `claude` CLI (Claude Code 2.1.330), subscription sign-in, no API key: for experiment E3 and as the MCP client |
+| Platform | macOS (darwin); nothing is macOS-specific |
+
+## Commands (from a fresh clone)
+
+```bash
+uv sync
+uv run pytest -q                                      # full suite, offline; 1153 passed on 2026-11-25
+uv run ruff check . && uv run mypy src
+
+uv run python -m job_search_agent.js3 filter          # score all 1,235 collected postings with FILTER.md (offline)
+uv run python -m job_search_agent.js3 shortlist       # label every claim of every kept posting
+uv run python -m job_search_agent.js3 audit-report    # the audit from experiments/js3/audit/hand_verdicts.json
+uv run python -m job_search_agent.js3 experiment filter               # E1, E2 (offline)
+uv run python -m job_search_agent.js3 experiment context --condition full       # E3 (calls claude; refuses if already run)
+uv run python -m job_search_agent.js3 serve           # the MCP server on stdio
+scripts/js3_mcp_claude.sh <name> "<prompt>"           # Claude Code as the MCP client, transcript to data/js3/mcp/
+uv run python scripts/js3_mcp_probe.py <name> -- <server command>   # our minimal MCP client
+```
+
+`audit-draw` has already run and refuses to run again. `filter --filter <file>` scores with
+another filter file (e.g. `experiments/js3/filters/FILTER.v0.1.md`).
+
+## What ran (all on 2026-11-25, run by Claude)
+
+| What | Result |
+|---|---|
+| Filter v0.1 on the corpus | 1,235 postings (Stripe 871, Ramp 181, Figma 150, Linear 33), 65 kept |
+| Filter v0.3 | 53 kept. v0.2 cut "api"/"apis" (false friend: 8 flips), v0.3 blocked R2 on specialty titles (4 flips); 4 changes rejected after measuring |
+| Audit draw (from v0.1) | 78 postings: 40 random rejects, 8 + 8 closest calls, 12 random kept, 14 changed or contested |
+| Shortlist (v0.3) | 53 postings, 384 claims; C4 contradicted on 21; C5 insufficient on all 53, so the agent says "I cannot tell" on every posting |
+| MCP, Claude Code as client | Real transcript: `server/discover` probe refused, `initialize` (2025-11-25), `tools/list`, two `tools/call`; $0.037 |
+| MCP probes | Our server (5 bad inputs, all refused correctly); Playwright MCP 0.0.86 (`tools/list`: 25 tools) |
+| E1, E2 (filter file, threshold) | Held-out 9/10 for every version; the one disagreement is a design choice (unknown location kept) |
+| E3 (judge context cut to 1,500 chars) | Held-out 10/10 → 7/10, as predicted; 20 valid replies, $0.60 in total |
+
+Not run: the hand verdicts (mine, below), any live fetch (JS3 reads only what JS2 collected; the
+newest raw is from 2026-11-11), and any other MCP client than Claude Code.
+
+## Sign-off — Job-Search Agent 3
+
+Facts to draw on: [`docs/js3/FACTS_FOR_SIGNOFF.md`](docs/js3/FACTS_FOR_SIGNOFF.md).
+
+```text
+Sign-off — Job-Search Agent 3
+Checked:      [Shubham: which properties, by which of your own tests (name them)]
+How:          [Shubham: by hand / by a test you wrote before reading Claude's code / by recomputation / with Claude's help (say which parts)]
+Not checked:  [Shubham: at least three real items]
+Not claiming: [Shubham: what this agent does not show]
+Signed or withheld: ____________ (name, date)
+```
+
+## Driver's seat — Job-Search Agent 3
+
+The "what Claude should do" and evidence columns are facts from this build. The "what I should
+do" column is Claude's draft for Shubham to edit; the last column is his to write.
+
+| Part | What Claude should do (and did) | What I should do (Claude's draft; Shubham edits) | Evidence | Why the judgment stays mine |
+|---|---|---|---|---|
+| The filter | Draft FILTER.md before code; implement it so the code reads its numbers from the document; count what each word matches and propose cuts | Decide what "relevant" means for me, adopt or change every rule and number, and decide which proposed changes to keep | `bd34a42`, `0a79edf`, `3d0f3ed`; FILTER.md §8 | [Shubham] |
+| The reject audit | Draw the sample as registered, build a blind worksheet, compute the intervals | Judge every posting myself, without looking at the scores | `e470923`; `docs/js3/audit/` | [Shubham] |
+| The shortlist claims | Label every claim against the posting's text, quote the span, say "I cannot tell" when the text is silent | Read the contradicted and insufficient claims; decide whether a posting is worth my time | `docs/js3/SHORTLIST.md`, `SHORTLIST_NOTES.md` | [Shubham] |
+| The tool server | Write the server, keep it read-only, record real transcripts, evaluate it and another server | Make the trust decision for each server | `docs/js3/TOOL_SERVER.md`, `data/js3/mcp/` | [Shubham] |
+| What moves the score | Account for every number; pre-register predictions; run one change at a time | Decide which numbers to keep and what the results mean | `docs/js3/SCORE.md`, `5448d94` (predictions) → `4d8395f` (results) | [Shubham] |
+| The sign-off | Collect facts and candidate limits | Decide what I can honestly claim; sign or withhold | `docs/js3/FACTS_FOR_SIGNOFF.md` | [Shubham] |
+
+---
+
+## Job-Search Agent 2 — The Loop, the Tools, and the Diff (previous layer)
 
 **Student:** Shubham Bagwe · **Course:** INFO 7375 — Prompt Engineering for Generative AI (Northeastern University) · **Instructor:** Nik Bear Brown · **Assignment:** JS2, due 2026-11-10
 

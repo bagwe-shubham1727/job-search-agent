@@ -1,5 +1,9 @@
 # FRICTIONAL.md – Where the Build Pushed Back
 
+## Job-Search Agent 3
+
+[Shubham: your dated JS3 entries, in your own words]
+
 ## Job-Search Agent 2
 
 **Student:** Shubham Bagwe  

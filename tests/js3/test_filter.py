@@ -39,8 +39,8 @@ def test_skill_cap_and_topic_once() -> None:
     s = scored(
         posting(
             "Backend Engineer",
-            "Java, Python, SQL, AWS, Docker, Kafka. backend, microservices, distributed systems."
-            + FILLER,
+            "Java, Python, SQL, AWS, Docker, Kafka. "
+            "backend, microservices, distributed systems." + FILLER,
         )
     )
     assert s.points["R4"] == 3 and s.points["R5"] == 1 and s.total == 9

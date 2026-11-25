@@ -12,7 +12,16 @@ import pytest
 from job_search_agent.js3.mcp_server import TOOL, Server, serve, transcript_logger
 from tests.conftest import REPO_ROOT
 
-INIT = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}}}
+INIT = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {},
+        "clientInfo": {"name": "t", "version": "0"},
+    },
+}
 READY = {"jsonrpc": "2.0", "method": "notifications/initialized"}
 
 
@@ -24,7 +33,14 @@ def _ready() -> Server:
 
 
 def _call(s: Server, args: object, name: str = "score_posting") -> dict:
-    reply = s.handle({"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": name, "arguments": args}})
+    reply = s.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": args},
+        }
+    )
     assert reply is not None
     return reply
 
@@ -42,18 +58,30 @@ def test_unknown_version_gets_the_newest() -> None:
 
 def test_nothing_but_initialize_and_ping_before_initialized() -> None:
     s = Server(REPO_ROOT)
-    assert s.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["error"]["code"] == -32600
+    assert (
+        s.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["error"]["code"]
+        == -32600
+    )
     assert s.handle({"jsonrpc": "2.0", "id": 2, "method": "ping"})["result"] == {}
 
 
 def test_lists_exactly_one_read_only_tool() -> None:
-    tools = _ready().handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]
+    tools = _ready().handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})[
+        "result"
+    ]["tools"]
     assert [t["name"] for t in tools] == ["score_posting"]
-    assert tools[0]["annotations"] == {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
+    assert tools[0]["annotations"] == {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    }
 
 
 def test_score_posting_returns_claims_for_a_collected_posting() -> None:
-    result = _call(_ready(), {"board": "greenhouse/stripe", "posting_id": "8128744"})["result"]
+    result = _call(_ready(), {"board": "greenhouse/stripe", "posting_id": "8128744"})[
+        "result"
+    ]
     assert result["isError"] is False
     out = result["structuredContent"]
     assert out["kept"] is True and out["filter_version"] == "0.3"
@@ -78,26 +106,51 @@ def test_bad_arguments_are_tool_errors(args: object) -> None:
 def test_unknown_tool_and_method_are_protocol_errors() -> None:
     s = _ready()
     assert _call(s, {}, name="apply_to_job")["error"]["code"] == -32602
-    assert s.handle({"jsonrpc": "2.0", "id": 3, "method": "resources/list"})["error"]["code"] == -32601
+    assert (
+        s.handle({"jsonrpc": "2.0", "id": 3, "method": "resources/list"})["error"][
+            "code"
+        ]
+        == -32601
+    )
 
 
 def test_notifications_get_no_reply_and_bad_lines_get_errors() -> None:
-    lines = [json.dumps(INIT), json.dumps(READY), "not json", "[1, 2]", json.dumps({"jsonrpc": "2.0", "id": 5, "method": "ping"})]
+    lines = [
+        json.dumps(INIT),
+        json.dumps(READY),
+        "not json",
+        "[1, 2]",
+        json.dumps({"jsonrpc": "2.0", "id": 5, "method": "ping"}),
+    ]
     out = io.BytesIO()
-    serve(Server(REPO_ROOT), io.BytesIO(("\n".join(lines) + "\n").encode()), out, lambda d, line: None)
+    serve(
+        Server(REPO_ROOT),
+        io.BytesIO(("\n".join(lines) + "\n").encode()),
+        out,
+        lambda d, line: None,
+    )
     replies = [json.loads(x) for x in out.getvalue().decode().splitlines()]
     assert [r.get("id") for r in replies] == [1, None, None, 5]
-    assert replies[1]["error"]["code"] == -32700 and replies[2]["error"]["code"] == -32600
+    assert (
+        replies[1]["error"]["code"] == -32700 and replies[2]["error"]["code"] == -32600
+    )
 
 
 def test_transcript_only_under_data_js3_mcp(tmp_path: object) -> None:
-    for bad in ("data/watch/x.jsonl", "data/js3/mcp/../../x.jsonl", "data/js3/mcp/x.txt"):
+    for bad in (
+        "data/watch/x.jsonl",
+        "data/js3/mcp/../../x.jsonl",
+        "data/js3/mcp/x.txt",
+    ):
         with pytest.raises(SystemExit):
             transcript_logger(REPO_ROOT, bad)
 
 
 def test_tool_description_says_it_never_acts() -> None:
-    assert "never applies, contacts anyone, logs in, or changes any file" in TOOL["description"]
+    assert (
+        "never applies, contacts anyone, logs in, or changes any file"
+        in TOOL["description"]
+    )
 
 
 @pytest.mark.subprocess
@@ -106,7 +159,10 @@ def test_stdio_session_end_to_end() -> None:
     proc = subprocess.run(
         [sys.executable, "-m", "job_search_agent.js3", "serve"],
         input="\n".join(json.dumps(x) for x in lines) + "\n",
-        capture_output=True, text=True, timeout=60, check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
     )
     replies = [json.loads(x) for x in proc.stdout.splitlines()]
     assert [r["id"] for r in replies] == [1, 2]

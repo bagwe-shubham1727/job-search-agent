@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import math
 import random
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from job_search_agent.js3.corpus import Entry
@@ -36,7 +36,7 @@ def draw(v01: Sequence[Scored], v03: Mapping[str, Scored]) -> dict[str, list[str
         :N_CLOSE_EACH
     ]
     close_kept = sorted(kept, key=lambda s: (s.total, *_order(s)))[:N_CLOSE_EACH]
-    rng = random.Random(SEED)
+    rng = random.Random(SEED)  # noqa: S311 - seeded draw for a reproducible audit, not security
     random_rejects = rng.sample(rejected, N_RANDOM_REJECTS)
     low = {s.key for s in close_kept}
     random_kept = rng.sample([s for s in kept if s.key not in low], N_RANDOM_KEPT)
@@ -62,7 +62,7 @@ def draw(v01: Sequence[Scored], v03: Mapping[str, Scored]) -> dict[str, list[str
 def worksheet_order(strata: Mapping[str, list[str]]) -> list[str]:
     """Every drawn key once, shuffled with a generator seeded after the draw."""
     keys = list(dict.fromkeys(k for ks in strata.values() for k in ks))
-    random.Random(SEED + 1).shuffle(keys)
+    random.Random(SEED + 1).shuffle(keys)  # noqa: S311 - seeded shuffle, not security
     return keys
 
 
@@ -73,14 +73,18 @@ def render_worksheet(
     lines = [
         "# Reject-audit worksheet (JS3, FILTER.md §5)",
         "",
-        "Judge each posting yourself, for Kiran Joshi: `RELEVANT` (a role Kiran targets, at a level",
-        "and in a place Kiran could take, so you would want to see it), `NOT_RELEVANT`, or",
+        "Judge each posting yourself, for Kiran Joshi: "
+        "`RELEVANT` (a role Kiran targets, at a level",
+        "and in a place Kiran could take, so you would want to see it), "
+        "`NOT_RELEVANT`, or",
         "`CANNOT_TELL`. Write the verdict and a short reason into",
-        "`experiments/js3/audit/hand_verdicts.json` (copy the template beside it). The filter's",
+        "`experiments/js3/audit/hand_verdicts.json` (copy the template beside it). "
+        "The filter's",
         "score, decision and stratum are deliberately not shown. Do not open",
         "`data/js3/audit/draw.json` until every verdict is written.",
         "",
-        f"{len(order)} postings. The text is the start of the cleaned posting; open the link for the rest.",
+        f"{len(order)} postings. The text is the start of the cleaned posting; "
+        "open the link for the rest.",
         "",
     ]
     for n, key in enumerate(order, 1):
@@ -89,11 +93,12 @@ def render_worksheet(
         text = clean_html(p.content_raw)
         cut = text[:excerpt] + ("…" if len(text) > excerpt else "")
         deps = ", ".join(d for d in p.department_names if d) or "—"
+        where = p.location_name if p.location_name is not None else "(none given)"
         lines += [
             f"## {n}. {p.title.strip()}",
             "",
             f"- **Key:** `{key}`",
-            f"- **Location:** {p.location_name if p.location_name is not None else '(none given)'}",
+            f"- **Location:** {where}",
             f"- **Departments:** {deps}",
             f"- **Link:** {e.url}",
             "",
@@ -130,7 +135,7 @@ def clopper_pearson(k: int, n: int, alpha: float = 0.05) -> tuple[float, float]:
     if n <= 0:
         raise ValueError("n must be positive")
 
-    def solve(f: Any) -> float:
+    def solve(f: Callable[[float], bool]) -> float:
         lo, hi = 0.0, 1.0
         for _ in range(100):
             mid = (lo + hi) / 2
@@ -143,7 +148,10 @@ def clopper_pearson(k: int, n: int, alpha: float = 0.05) -> tuple[float, float]:
 
 
 def validate_verdicts(doc: Mapping[str, Any], order: Sequence[str]) -> list[str]:
-    """Problems with a filled verdict file; empty when it is complete and matches the draw."""
+    """Problems with a filled verdict file.
+
+    Empty when it is complete and matches the draw.
+    """
     problems = []
     if not doc.get("judged_by") or not doc.get("judged_on"):
         problems.append("judged_by and judged_on must be filled")

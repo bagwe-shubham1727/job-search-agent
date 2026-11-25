@@ -110,3 +110,7 @@ were ever needed for discovery: a pinned version, headless and isolated, with no
 The server was exercised by one client (Claude Code 2.1.330) and our own probe; no other MCP
 client. The Playwright evaluation is from declared metadata and source reading; no Playwright tool
 was run. The Streamable HTTP transport was not implemented.
+
+`uv run jsa audit-privacy data/js3` reports two findings, both the persona's name "Kiran Joshi"
+in the tool description that the transcripts record. The persona is fictional (CONTRACT §4), so
+this is expected; it does show that a tool description is data that travels to the client.
