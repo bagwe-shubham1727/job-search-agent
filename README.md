@@ -107,14 +107,14 @@ Signed or withheld: Signed, Shubham Bagwe, 2026-11-25
 
 ## Driver's seat — Job-Search Agent 3
 
-| Part | What Claude should do (and did) | Evidence | Why the judgment stays mine |
-|---|---|---|---|
-| The filter | Draft FILTER.md before code; implement it so the code reads its numbers from the document; count what each word matches and propose cuts | `bd34a42`, `0a79edf`, `3d0f3ed`; FILTER.md §8 | Only I decide what "relevant" means for Kiran's search; the filter can implement my priorities, but it cannot choose those priorities for me. |
-| The reject audit | Draw the sample as registered, build a blind worksheet, compute the intervals | `e470923`; `docs/js3/audit/` | The verdicts have to come from a human; otherwise the audit would be checking the machine against its own judgments. |
-| The shortlist claims | Label every claim against the posting's text, quote the span, say "I cannot tell" when the text is silent | `docs/js3/SHORTLIST.md`, `SHORTLIST_NOTES.md` | The labels describe what the posting text supports, not whether the job is worth my time; my audit found that 9 of 12 kept postings were not worth keeping. |
-| The tool server | Write the server, keep it read-only, record real transcripts, evaluate it and another server | `docs/js3/TOOL_SERVER.md`, `data/js3/mcp/` | Trust is a risk decision about my machine and accounts, so I must decide which server and permissions I am willing to trust. |
-| What moves the score | Account for every number; pre-register predictions; run one change at a time | `docs/js3/SCORE.md`, `5448d94` (predictions) → `4d8395f` (results) | I must decide what the results mean and which numbers to keep; experimental measurements inform that choice but do not make it for me. |
-| The sign-off | Collect facts and candidate limits | `docs/js3/FACTS_FOR_SIGNOFF.md` | I am accountable for the claims in my submission, including the limits of the evidence, so the final sign-off must be mine. |
+| Part | What Claude should do (and did) | What I should do | Evidence | Why the judgment stays mine |
+|---|---|---|---|---|
+| The filter | Draft FILTER.md before code; implement it so the code reads its numbers from the document; count what each word matches and propose cuts | Decide what "relevant" means for me, adopt or change every rule and number, and decide which proposed changes to keep | `bd34a42`, `0a79edf`, `3d0f3ed`; FILTER.md §8 | Only I decide what "relevant" means for Kiran's search; the filter can implement my priorities, but it cannot choose those priorities for me. |
+| The reject audit | Draw the sample as registered, build a blind worksheet, compute the intervals | Judge every posting myself, without looking at the scores | `e470923`; `docs/js3/audit/` | The verdicts have to come from a human; otherwise the audit would be checking the machine against its own judgments. |
+| The shortlist claims | Label every claim against the posting's text, quote the span, say "I cannot tell" when the text is silent | Read the contradicted and insufficient claims; decide whether a posting is worth my time | `docs/js3/SHORTLIST.md`, `SHORTLIST_NOTES.md` | The labels describe what the posting text supports, not whether the job is worth my time; my audit found that 9 of 12 kept postings were not worth keeping. |
+| The tool server | Write the server, keep it read-only, record real transcripts, evaluate it and another server | Make the trust decision for each server | `docs/js3/TOOL_SERVER.md`, `data/js3/mcp/` | Trust is a risk decision about my machine and accounts, so I must decide which server and permissions I am willing to trust. |
+| What moves the score | Account for every number; pre-register predictions; run one change at a time | Decide which numbers to keep and what the results mean | `docs/js3/SCORE.md`, `5448d94` (predictions) → `4d8395f` (results) | I must decide what the results mean and which numbers to keep; experimental measurements inform that choice but do not make it for me. |
+| The sign-off | Collect facts and candidate limits | Decide what I can honestly claim; sign or withhold | `docs/js3/FACTS_FOR_SIGNOFF.md` | I am accountable for the claims in my submission, including the limits of the evidence, so the final sign-off must be mine. |
 
 ---
 
