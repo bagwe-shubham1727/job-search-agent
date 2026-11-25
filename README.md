@@ -58,7 +58,7 @@ uv run python scripts/js3_mcp_probe.py <name> -- <server command>   # our minima
 `audit-draw` has already run and refuses to run again. `filter --filter <file>` scores with
 another filter file (e.g. `experiments/js3/filters/FILTER.v0.1.md`).
 
-## What ran (all on 2026-11-25, run by Claude)
+## What ran (all on 2026-11-25)
 
 | What | Result |
 |---|---|
