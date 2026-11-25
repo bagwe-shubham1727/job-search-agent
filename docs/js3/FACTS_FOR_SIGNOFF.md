@@ -33,7 +33,9 @@ audit draw `e470923`, predictions `5448d94`, results `4d8395f`.
    it, no sponsorship pattern fires on real data, only in tests.
 9. C4 counts any "N years" in a sentence that mentions experience ("systems that have run for
    20 years" would read as a 20-year minimum), and misses "Two years" and "3+ yrs".
-6. The corpus is from 2026-11-11 or earlier; no board was fetched for JS3.
+6. The corpus is from 2026-11-11 or earlier; it was not re-fetched. A separate live check on
+   2026-11-25 found 36 of the 53 shortlisted postings still listed; 2 of the 17 gone had already
+   left the board before 2026-11-11 but stayed in the corpus (`docs/js3/LIVENESS.md`).
 7. The MCP server was used by one client (Claude Code 2.1.330); Playwright MCP was evaluated
    from its tool list and source, never run.
 8. E3 ran each condition once (10 calls each); a re-run could differ.
