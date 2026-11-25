@@ -71,8 +71,12 @@ another filter file (e.g. `experiments/js3/filters/FILTER.v0.1.md`).
 | E1, E2 (filter file, threshold) | Held-out 9/10 for every version; the one disagreement is a design choice (unknown location kept) |
 | E3 (judge context cut to 1,500 chars) | Held-out 10/10 → 7/10, as predicted; 20 valid replies, $0.60 in total |
 
-Not run: the hand verdicts (mine, below), any live fetch (JS3 reads only what JS2 collected; the
-newest raw is from 2026-11-11), and any other MCP client than Claude Code.
+The 78 audit verdicts are mine (2026-11-25, `cc0b7d0`): 0 of 40 random rejects relevant (95%
+interval 0–8.8%), 4 of 8 closest rejects relevant, 9 of 12 random kept postings not relevant under
+v0.3; results in [`docs/js3/audit/AUDIT_REPORT.md`](docs/js3/audit/AUDIT_REPORT.md).
+
+Not run: any live fetch (JS3 reads only what JS2 collected; the newest raw is from 2026-11-11), and
+any other MCP client than Claude Code.
 
 ## Sign-off — Job-Search Agent 3
 
