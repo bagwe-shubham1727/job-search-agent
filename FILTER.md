@@ -1,6 +1,6 @@
 # FILTER.md — Job-Search Agent 3: the filter, the evidence rules, and the score
 
-**Version:** v0.2, 2026-11-25 (v0.1 written before any JS3 code; changes in §8). **Status: Claude's draft, not yet
+**Version:** v0.3, 2026-11-25 (v0.1 written before any JS3 code; changes in §8). **Status: Claude's draft, not yet
 adopted.** Shubham reviews it, changes what he disagrees with, and adopts it as v1.0 (as with
 `GATE.md` in JS2). Until then every number below is Claude's proposal.
 **Persona:** Kiran Joshi (fictional), the same as in `CONTRACT.md` and `GATE.md`.
@@ -20,13 +20,16 @@ board, or Claude.
 
 <!-- filter:begin -->
 ```toml
-version = "0.2"
+version = "0.3"
 threshold = 7
 
 [title]
 family_phrase = 4            # R1
 generic_words = ["engineer", "developer"]
 generic_weight = 2           # R2 (R1 and R2 do not add: the title scores the larger one)
+generic_blockers = ["security", "solutions", "solution", "support", "sales", "compliance",
+                    "integration", "operations", "curriculum", "research", "partner",
+                    "business systems", "implementation", "enablement"]   # R2 off (v0.3)
 seniority_markers = ["senior", "sr", "staff", "principal", "lead", "manager", "director",
                      "intern", "internship", "iii", "iv", "l3", "l4"]
 seniority_weight = -10       # R3
@@ -54,7 +57,7 @@ weight = -10                 # R7
 | Rule | What it reads | Points | Why (one line) |
 |---|---|---:|---|
 | R1 role phrase | Title contains a CONTRACT §6.1 role-family phrase for one of `$.target.roles` ("software engineer", "backend engineer", "full stack engineer", …) | +4 | The title is the employer's own name for the job and the strongest single signal of what the work is. |
-| R2 generic role word | Title contains the whole word "engineer" or "developer" but no R1 phrase | +2 | Titles like "Product Engineer" or "Engineer, Payments" can be the same job under a different name, so they get a chance but must earn the rest from the text. |
+| R2 generic role word | Title contains the whole word "engineer" or "developer" but no R1 phrase, and (v0.3) none of the `generic_blockers` specialty words | +2 | Titles like "Product Engineer" or "Engineer, Payments" can be the same job under a different name, so they get a chance but must earn the rest from the text. A specialty word ("Security Engineer", "Solutions Engineer") names a different job, so R2 does not apply. |
 | R3 seniority marker | Title contains a §6.1 marker as a whole word (senior, staff, lead, intern, …) | −10 | Kiran targets new-grad to SWE II; a senior or intern title is a different job however well the stack matches, so this is a veto. |
 | R4 résumé skills | Distinct skills from the seven §4 résumé skill arrays found in the title, content or departments with the §6.2 matching (whole words, the special cases for C#, React, REST, …) | +1 each, at most 3 | Shared stack is evidence Kiran could do the work; the cap stops a long technology list from outweighing the title. |
 | R5 topic words | Any of the listed topic words as a whole word in the cleaned content | +1 once | These words describe the kind of engineering Kiran has done (web apps, backend, distributed systems); once is enough to show the topic, more would reward wordiness. "api"/"apis" were cut in v0.2 (§8). |
@@ -194,3 +197,17 @@ shown beside the record.
 |---|---|---|---|---|
 | v0.1 | 2026-11-25 | First draft (Claude) | §1 reasons | Not yet: written before the code. On the full corpus (1,235 postings): 65 kept |
 | v0.2 | 2026-11-25 | **Cut** "api" and "apis" from R5 | **False friend.** At Stripe, an API company, "API" appears in sales and product postings because of what the company sells, not what the job builds: "preferably at an API-first company", "Ability to understand the Stripe API" (Account Executive postings). 193 of the 984 postings with no role word in the title got R5 from "api"/"apis" alone | Flips 8 kept → rejected, every one a generic-title specialty job held up by R5 (Infrastructure Engineer, Privy; Cloud Security Engineer; Security Engineer, Privy ×2; Solutions Engineer, AI Build Team; Partner Solutions Engineer; Compliance Engineer; Data & Integration Engineer). No role-phrase title flips. 57 kept |
+| v0.3 | 2026-11-25 | **Added** `generic_blockers`: R2 does not apply when the title also has a specialty word | **False friend.** "Engineer" matched in "Security Engineer", "Technical Solutions Engineer", "Integration Engineer, Professional Services": the word is right, the job is not one Kiran targets. A blocker only switches R2 off; it never touches an R1 title, so "Software Engineer, Security, Stablecoin" keeps its 4 points | Flips 4 kept → rejected on top of v0.2: Technical Solutions Engineer, Integration Engineer (Professional Services), Security Engineer, Offensive Security Engineer. 53 kept |
+| — | 2026-11-25 | **Rejected:** threshold 8 | Would make the CONTRACT bar (role phrase + 2 skills + US) insufficient | Flips 26 kept → rejected on v0.1, 9 of them role-phrase titles (e.g. Ramp "Software Engineer, Backend, Growth", Stripe "Full Stack Engineer, Bridge") |
+| — | 2026-11-25 | **Rejected:** threshold 6 | Lets one-skill and specialty postings through | Flips 22 rejected → kept on v0.1: 9 role-phrase titles with one skill or none, and 13 generic titles, 9 of them with a specialty word (Machine Learning Engineer, Support Engineer, Security Engineer, Cloud, …). Measured again on held-out labels as experiment E2 |
+| — | 2026-11-25 | **Rejected:** cut R2 entirely (weight 0) | R2's false friends are better handled by blockers | Flips 17 kept → rejected on v0.1, including "Backend/API Engineer, Money as a Service" (R1 misses it because of the "/", CONTRACT A2) and "Design Engineer", which look like Kiran's kind of work |
+| — | 2026-11-25 | **Rejected:** add "deployed" to the blockers | I cannot tell from the title: Forward Deployed Engineers at Stripe and Figma write production code with customers | Left to the audit: both Forward Deployed postings are in the worksheet's "changed or contested" stratum |
+
+All v0.2 and v0.3 measurements were made by Claude by counting flips and reading the matched
+sentences, before any of my audit verdicts existed, so those verdicts are held out for these
+changes (§6). The audit draw (§5) is made from **v0.1**, as registered, and the report scores
+v0.1 and v0.3 on the same hand-judged postings. **Amendment to §5 (v0.3):** after the
+registered draws, every posting whose decision differs between v0.1 and v0.3, plus the two
+Forward Deployed postings, is appended to the worksheet as a "changed or contested" stratum (not
+random; counts only). The registered random draws are made first, with the same generator, so
+they are unchanged by this addition.
