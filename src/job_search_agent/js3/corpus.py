@@ -67,7 +67,11 @@ class Corpus:
 
 def _raw_files(root: Path, board: str) -> list[Path]:
     provider, token = board.split("/")
-    files = sorted(root.glob(f"data/watch/boards/{provider}-{token}/live/runs/*/raw/{provider}-{token}.json"))
+    files = sorted(
+        root.glob(
+            f"data/watch/boards/{provider}-{token}/live/runs/*/raw/{provider}-{token}.json"
+        )
+    )
     if board == "greenhouse/stripe":
         js1 = sorted(root.glob("data/live/runs/*/raw/greenhouse-stripe.json"))
         files = [root / HANDCHECK_RAW, *js1, *files]
@@ -98,12 +102,20 @@ def load_corpus(root: Path, boards: tuple[str, ...] = EXPECTED_BOARDS) -> Corpus
             missing[board] = missing.get(board, "no saved raw response")
         else:
             missing.pop(board, None)
-    ordered = sorted(entries.values(), key=lambda e: (EXPECTED_BOARDS.index(e.board) if e.board in EXPECTED_BOARDS else 99, e.posting.posting_id))
+    ordered = sorted(
+        entries.values(),
+        key=lambda e: (
+            EXPECTED_BOARDS.index(e.board) if e.board in EXPECTED_BOARDS else 99,
+            e.posting.posting_id,
+        ),
+    )
     return Corpus(tuple(ordered), raws, missing)
 
 
 def load_inputs(root: Path) -> RuleInputs:
     """The persona's roles and skills, through the pinned-hash résumé gate (CONTRACT §12)."""
     config = load_config(root / "config" / "agent.toml")
-    resume = load_verified_resume(config.resume_path, config.resume.pinned_sha256, project_root=root)
+    resume = load_verified_resume(
+        config.resume_path, config.resume.pinned_sha256, project_root=root
+    )
     return rule_inputs(resume.to_dict())

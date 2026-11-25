@@ -56,7 +56,9 @@ def parse_filter(text: str) -> FilterSpec:
     """
     blocks = _BLOCK.findall(text)
     if len(blocks) != 1:
-        raise ConfigError(f"FILTER.md must hold exactly one filter block, found {len(blocks)}")
+        raise ConfigError(
+            f"FILTER.md must hold exactly one filter block, found {len(blocks)}"
+        )
     try:
         d: dict[str, Any] = tomllib.loads(blocks[0])
         t, s, tp, loc = d["title"], d["skills"], d["topic"], d["location"]
@@ -123,7 +125,9 @@ class Scored:
         return f"{parts or '0'} = {self.total}"
 
 
-def score(posting: Posting, key: str, board: str, spec: FilterSpec, inputs: RuleInputs) -> Scored:
+def score(
+    posting: Posting, key: str, board: str, spec: FilterSpec, inputs: RuleInputs
+) -> Scored:
     """Scores one posting under FILTER.md §1. The caller handles a missing title."""
     norm = normalize_title(posting.title)
     family = tuple(title_check(posting.title, inputs.roles).matched_roles)
@@ -134,16 +138,26 @@ def score(posting: Posting, key: str, board: str, spec: FilterSpec, inputs: Rule
     if blocker:  # v0.3: a specialty word means R2's generic word names a different job
         generic = None
     marker_pat = whole_words(spec.seniority_markers)
-    markers = tuple(dict.fromkeys(m.group(0).lower() for m in marker_pat.finditer(norm))) if marker_pat else ()
+    markers = (
+        tuple(dict.fromkeys(m.group(0).lower() for m in marker_pat.finditer(norm)))
+        if marker_pat
+        else ()
+    )
     skills = tuple(match_skills(posting, inputs.skills))
     content = clean_html(posting.content_raw)
     topic_pat = whole_words(spec.topic_words)
-    topics = tuple(dict.fromkeys(m.group(0).lower() for m in topic_pat.finditer(content))) if topic_pat else ()
+    topics = (
+        tuple(dict.fromkeys(m.group(0).lower() for m in topic_pat.finditer(content)))
+        if topic_pat
+        else ()
+    )
     fallback = CONTENT_PATH if "content" in posting.raw else "$.id"
     location = classify_location(posting.location_name, content, fallback_path=fallback)
     exclusions = tuple(find_exclusions(posting))
 
-    title_pts = spec.family_phrase if family else (spec.generic_weight if generic else 0)
+    title_pts = (
+        spec.family_phrase if family else (spec.generic_weight if generic else 0)
+    )
     points = {
         "R1": title_pts if family else 0,
         "R2": title_pts if not family else 0,
