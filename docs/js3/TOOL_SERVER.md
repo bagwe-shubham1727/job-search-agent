@@ -69,7 +69,7 @@ machine to explain a posting: it can do nothing but read three kinds of local fi
 text. Do not expose it beyond stdio, and do not let its "Matches the filter" stand in for
 Shubham's judgement.
 
-**Shubham's decision:** [Shubham: confirm or change, with your reason]
+**Shubham's decision:** Trust only for local use I would allow Claude to call this server on my machine because its capabilities are restricted to evaluating saved job postings, with no network access or ability to apply for jobs. However, the transcript-writing behavior and the possibility of its scoring output being mistaken for a recommendation concern me, so I would not expose it over a network or allow others to access it.
 
 ## 4. Evaluating someone else's server: Playwright MCP
 
@@ -103,7 +103,7 @@ model apply for a job or send a message, which this agent must never do (course 
 §3). Run as `@latest`, the code that runs can change on every start without review. If a browser
 were ever needed for discovery: a pinned version, headless and isolated, with no saved login.
 
-**Shubham's decision:** [Shubham: confirm or change, with your reason]
+**Shubham's decision:** Don't trust for this agent Playwright MCP provides browser capabilities that could allow Claude to submit applications, send messages, or interact with authenticated accounts, which violates this agent's boundaries. Running it through @latest also introduces risks because its code can change without review. I would consider using a pinned version in an isolated environment for manual browser testing, but not for autonomous job-search operations.
 
 ## 5. What this section does not show
 
