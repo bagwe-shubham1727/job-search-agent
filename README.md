@@ -80,11 +80,30 @@ Facts to draw on: [`docs/js3/FACTS_FOR_SIGNOFF.md`](docs/js3/FACTS_FOR_SIGNOFF.m
 
 ```text
 Sign-off — Job-Search Agent 3
-Checked:      [Shubham: which properties, by which of your own tests (name them)]
-How:          [Shubham: by hand / by a test you wrote before reading Claude's code / by recomputation / with Claude's help (say which parts)]
-Not checked:  [Shubham: at least three real items]
-Not claiming: [Shubham: what this agent does not show]
-Signed or withheld: ____________ (name, date)
+Checked:      I judged all 78 postings in the blind audit worksheet by hand. I also
+              judged all 12 postings affected by the v0.2/v0.3 filter flips, and all
+              12 matched my judgment. After reading TOOL_SERVER.md, I made both
+              trust decisions about the tool servers.
+
+How:          By hand: I made the 78 blind-audit verdicts, judged the 12 filter
+              flips, and made the two tool-server trust decisions. By recomputation:
+              audit-report calculated the audit counts from my hand verdicts.
+              With Claude's help: the code, tests, runs, and document drafts. I did
+              not write a test before reading Claude's code.
+
+Not checked:  (1) The 10 held-out labels do not establish the effect of the filter
+              changes. (2) The C4 years rule does not cover equivalent wording such
+              as "no more than 18 months" or "three (3) years." (3) JS3 did not fetch
+              live postings; the corpus is dated 2026-11-11. (4) Playwright was not
+              run. (5) E3 ran once per condition.
+
+Not claiming: That a kept posting is worth applying to; that the audit establishes
+              a precise or generally applicable miss rate (0 of 40 random rejects
+              judged relevant still has uncertainty); or that any model was trained.
+              The agent supports discovery and evidence review, not the final
+              decision about where I should spend my application time.
+
+Signed or withheld: Signed, Shubham Bagwe, 2026-11-25
 ```
 
 ## Driver's seat — Job-Search Agent 3
@@ -94,12 +113,12 @@ do" column is Claude's draft for Shubham to edit; the last column is his to writ
 
 | Part | What Claude should do (and did) | What I should do (Claude's draft; Shubham edits) | Evidence | Why the judgment stays mine |
 |---|---|---|---|---|
-| The filter | Draft FILTER.md before code; implement it so the code reads its numbers from the document; count what each word matches and propose cuts | Decide what "relevant" means for me, adopt or change every rule and number, and decide which proposed changes to keep | `bd34a42`, `0a79edf`, `3d0f3ed`; FILTER.md §8 | [Shubham] |
-| The reject audit | Draw the sample as registered, build a blind worksheet, compute the intervals | Judge every posting myself, without looking at the scores | `e470923`; `docs/js3/audit/` | [Shubham] |
-| The shortlist claims | Label every claim against the posting's text, quote the span, say "I cannot tell" when the text is silent | Read the contradicted and insufficient claims; decide whether a posting is worth my time | `docs/js3/SHORTLIST.md`, `SHORTLIST_NOTES.md` | [Shubham] |
-| The tool server | Write the server, keep it read-only, record real transcripts, evaluate it and another server | Make the trust decision for each server | `docs/js3/TOOL_SERVER.md`, `data/js3/mcp/` | [Shubham] |
-| What moves the score | Account for every number; pre-register predictions; run one change at a time | Decide which numbers to keep and what the results mean | `docs/js3/SCORE.md`, `5448d94` (predictions) → `4d8395f` (results) | [Shubham] |
-| The sign-off | Collect facts and candidate limits | Decide what I can honestly claim; sign or withhold | `docs/js3/FACTS_FOR_SIGNOFF.md` | [Shubham] |
+| The filter | Draft FILTER.md before code; implement it so the code reads its numbers from the document; count what each word matches and propose cuts | Decide what "relevant" means for me, adopt or change every rule and number, and decide which proposed changes to keep | `bd34a42`, `0a79edf`, `3d0f3ed`; FILTER.md §8 | Only I decide what "relevant" means for Kiran's search; the filter can implement my priorities, but it cannot choose those priorities for me. |
+| The reject audit | Draw the sample as registered, build a blind worksheet, compute the intervals | Judge every posting myself, without looking at the scores | `e470923`; `docs/js3/audit/` | The verdicts have to come from a human; otherwise the audit would be checking the machine against its own judgments. |
+| The shortlist claims | Label every claim against the posting's text, quote the span, say "I cannot tell" when the text is silent | Read the contradicted and insufficient claims; decide whether a posting is worth my time | `docs/js3/SHORTLIST.md`, `SHORTLIST_NOTES.md` | The labels describe what the posting text supports, not whether the job is worth my time; my audit found that 9 of 12 kept postings were not worth keeping. |
+| The tool server | Write the server, keep it read-only, record real transcripts, evaluate it and another server | Make the trust decision for each server | `docs/js3/TOOL_SERVER.md`, `data/js3/mcp/` | Trust is a risk decision about my machine and accounts, so I must decide which server and permissions I am willing to trust. |
+| What moves the score | Account for every number; pre-register predictions; run one change at a time | Decide which numbers to keep and what the results mean | `docs/js3/SCORE.md`, `5448d94` (predictions) → `4d8395f` (results) | I must decide what the results mean and which numbers to keep; experimental measurements inform that choice but do not make it for me. |
+| The sign-off | Collect facts and candidate limits | Decide what I can honestly claim; sign or withhold | `docs/js3/FACTS_FOR_SIGNOFF.md` | I am accountable for the claims in my submission, including the limits of the evidence, so the final sign-off must be mine. |
 
 ---
 
