@@ -1,4 +1,4 @@
-"""Which shortlisted postings are still open? (JS3, optional live check.)
+"""Checks which shortlisted postings are still open (JS3, optional live check).
 
 One GET per board to its public list endpoint (the same allow-listed hosts as JS2,
 without content), then a membership check for each shortlisted posting. Writes only
@@ -83,9 +83,8 @@ def main() -> int:
     path.write_text(
         json.dumps(out, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    print(
-        f"{out['still_listed']} of {out['n']} still listed; wrote {path.relative_to(ROOT)}"
-    )
+    rel = path.relative_to(ROOT)
+    print(f"{out['still_listed']} of {out['n']} still listed; wrote {rel}")
     return 0
 
 
