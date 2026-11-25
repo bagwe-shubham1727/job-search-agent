@@ -28,8 +28,11 @@ audit draw `e470923`, predictions `5448d94`, results `4d8395f`.
 3. The C2 "supported" labels are word matches: "such as Python, or similar" counts as asking for Python.
 4. C4 reads only "N+ years" minimums: it misses ceilings ("no more than 18 months"), spelled-out
    numbers with a parenthesis ("three (3) years"), and treats "preferred" as required.
-5. C5 recognised no sponsorship sentence in any of the 53 shortlisted postings; the sponsorship
-   patterns were never seen to fire on real data (only in tests).
+5. C5 is insufficient on all 1,235 postings. Before the review fix, its "offer" pattern wrongly
+   labelled two Ramp postings "supported" (a golfer sponsorship, a relocation sponsorship); after
+   it, no sponsorship pattern fires on real data, only in tests.
+9. C4 counts any "N years" in a sentence that mentions experience ("systems that have run for
+   20 years" would read as a 20-year minimum), and misses "Two years" and "3+ yrs".
 6. The corpus is from 2026-11-11 or earlier; no board was fetched for JS3.
 7. The MCP server was used by one client (Claude Code 2.1.330); Playwright MCP was evaluated
    from its tool list and source, never run.

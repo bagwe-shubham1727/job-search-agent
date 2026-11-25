@@ -22,7 +22,7 @@ not use the Reallocation Engine or Lectern code.
 
 ### What Claude contributed (JS3)
 
-Claude Code (Opus 5.5), overnight on 2026-11-25 at my request, while I was away:
+Claude Code (Opus 5.5), overnight on 2026-11-25, at Shubham's request while he was away:
 
 - **`FILTER.md`.** Drafted v0.1 (rules R1–R7 with reasons, evidence rules C1–C5 and the "I cannot
   tell" rules, expected sources, wrong versions WV1–WV5, the pre-registered audit draw) and
@@ -41,6 +41,7 @@ Claude Code (Opus 5.5), overnight on 2026-11-25 at my request, while I was away:
   counterexample, both server evaluations (the trust decisions are recommendations for me to
   make), the provenance of every number, the persistence statement, `docs/js3/*`, the JS3 part of
   this README except the sign-off and the "why" column.
+- **An independent Claude review agent** checked the build and found the C5 sponsorship false positives, the audit-order leak and the boilerplate-only worksheet; Claude fixed all three.
 - **Claude made no audit verdict**, no trust decision, no sign-off and no Frictional entry.
 
 ## Job-Search Agent 2 — the loop, the tools, and the diff

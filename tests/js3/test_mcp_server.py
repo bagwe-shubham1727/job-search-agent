@@ -166,3 +166,9 @@ def test_stdio_session_end_to_end() -> None:
     )
     replies = [json.loads(x) for x in proc.stdout.splitlines()]
     assert [r["id"] for r in replies] == [1, 2]
+
+
+@pytest.mark.parametrize("bad_id", [None, {"a": 1}, [1], True])
+def test_id_must_be_string_or_integer(bad_id: object) -> None:
+    reply = _ready().handle({"jsonrpc": "2.0", "id": bad_id, "method": "ping"})
+    assert reply is not None and reply["error"]["code"] == -32600

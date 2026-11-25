@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from job_search_agent.js3.claims import (
     CONTRADICTED,
     INSUFFICIENT,
@@ -129,3 +131,34 @@ def test_limit_spelled_number_with_parenthesis() -> None:
         )
         is None
     )
+
+
+# Review fixes (2026-11-25): two real false "supported" labels (Ramp),
+# and two missed refusals.
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "We sponsored Neal Shipley while he was still an amateur golfer.",
+        "We will sponsor you for relocation.",
+    ],
+)
+def test_sponsor_without_visa_context_is_not_support(text: str) -> None:
+    assert _labels("Software Engineer", "Java and SQL. " + text)["C5"] == INSUFFICIENT
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "We do not currently sponsor visas.",
+        "Sponsorship is not available for this position.",
+    ],
+)
+def test_more_refusals_contradict(text: str) -> None:
+    assert _labels("Software Engineer", "Java and SQL. " + text)["C5"] == CONTRADICTED
+
+
+def test_visa_sponsorship_offer_is_support() -> None:
+    text = "Java and SQL. We will sponsor H-1B visas for this role."
+    assert _labels("Software Engineer", text)["C5"] == SUPPORTED

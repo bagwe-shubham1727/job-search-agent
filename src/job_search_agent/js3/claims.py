@@ -42,7 +42,9 @@ _SPONSOR_NO = re.compile(
     r"|\bwithout (?:the need for |requiring )?(?:current or future )?"
     r"(?:visa |employer |immigration )?sponsorship"
     r"|\bnot (?:eligible for|offering|provide) (?:visa |immigration )?sponsorship"
-    r"|\bno (?:visa |immigration )?sponsorship",
+    r"|\bno (?:visa |immigration )?sponsorship"
+    r"|\b(?:do|does|will) not (?:currently )?(?:offer |provide )?(?:visa )?sponsor"
+    r"|\bsponsorship is not (?:currently )?(?:available|offered|provided)",
     re.IGNORECASE,
 )
 _SPONSOR_YES = re.compile(
@@ -53,6 +55,12 @@ _SPONSOR_YES = re.compile(
     r"(?:offer |provide )?(?:visa )?sponsor",
     re.IGNORECASE,
 )
+_VISA_CONTEXT = re.compile(
+    r"\b(?:visas?|immigration|h-?1b|opt|work authori[sz]ation|green card)\b",
+    re.IGNORECASE,
+)
+"""A YES match counts only in a sentence about visas or work authorization (review fix:
+"We sponsored Neal Shipley" and "We will sponsor you for relocation" are not offers)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,7 +231,11 @@ def _authorization(s: Scored) -> Claim:
     for sentence in segments(s.posting.content_raw):
         if no is None and (m := _SPONSOR_NO.search(sentence)):
             no = ("$.content", _quote(sentence, m.start(), m.end()))
-        elif yes is None and (m := _SPONSOR_YES.search(sentence)):
+        elif (
+            yes is None
+            and (m := _SPONSOR_YES.search(sentence))
+            and _VISA_CONTEXT.search(sentence)
+        ):
             yes = ("$.content", _quote(sentence, m.start(), m.end()))
     barred = [
         p

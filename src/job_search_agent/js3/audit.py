@@ -12,9 +12,9 @@ import random
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
+from job_search_agent.js3.claims import segments
 from job_search_agent.js3.corpus import Entry
 from job_search_agent.js3.filter import Scored
-from job_search_agent.text import clean_html
 
 SEED = 20261125
 N_RANDOM_REJECTS = 40
@@ -66,10 +66,20 @@ def worksheet_order(strata: Mapping[str, list[str]]) -> list[str]:
     return keys
 
 
-def render_worksheet(
-    order: Sequence[str], entries: Mapping[str, Entry], excerpt: int = 900
-) -> str:
-    """The blind worksheet: no score, no decision, no stratum."""
+AVOID_UNTIL_DONE = (
+    "data/js3/audit/draw.json",
+    "FILTER.md §8 and experiments/js3/filters/",
+    "docs/js3/SHORTLIST.md and SHORTLIST_NOTES.md",
+    "docs/js3/AUDIT.md §2 and docs/js3/filter/",
+    "data/js3/filter/ and data/js3/shortlist.json",
+    "docs/js3/SCORE.md",
+    'the README "What ran" table',
+)
+"""Files that reveal the filter's decisions on worksheet postings (review fix)."""
+
+
+def render_worksheet(order: Sequence[str], entries: Mapping[str, Entry]) -> str:
+    """The blind worksheet: full posting text; no score, no decision, no stratum."""
     lines = [
         "# Reject-audit worksheet (JS3, FILTER.md §5)",
         "",
@@ -80,20 +90,22 @@ def render_worksheet(
         "`CANNOT_TELL`. Write the verdict and a short reason into",
         "`experiments/js3/audit/hand_verdicts.json` (copy the template beside it). "
         "The filter's",
-        "score, decision and stratum are deliberately not shown. Do not open",
-        "`data/js3/audit/draw.json` until every verdict is written.",
+        "score, decision and stratum are deliberately not shown.",
         "",
-        f"{len(order)} postings. The text is the start of the cleaned posting; "
-        "open the link for the rest.",
+        "**Until every verdict is written, do not open:**",
+        "",
+        *[f"- {item}" for item in AVOID_UNTIL_DONE],
+        "",
+        f"{len(order)} postings, each with its full saved text (collected on or "
+        "before 2026-11-11; the link may no longer work).",
         "",
     ]
     for n, key in enumerate(order, 1):
         e = entries[key]
         p = e.posting
-        text = clean_html(p.content_raw)
-        cut = text[:excerpt] + ("…" if len(text) > excerpt else "")
         deps = ", ".join(d for d in p.department_names if d) or "—"
         where = p.location_name if p.location_name is not None else "(none given)"
+        body = segments(p.content_raw) or ["(no text)"]
         lines += [
             f"## {n}. {p.title.strip()}",
             "",
@@ -102,7 +114,11 @@ def render_worksheet(
             f"- **Departments:** {deps}",
             f"- **Link:** {e.url}",
             "",
-            f"> {cut}",
+            "<details><summary>Full text</summary>",
+            "",
+            *[f"> {line}  " for line in body],
+            "",
+            "</details>",
             "",
         ]
     return "\n".join(lines)

@@ -167,6 +167,8 @@ class Server:
                 self._initialized = True
             return None
         msg_id = msg["id"]
+        if isinstance(msg_id, bool) or not isinstance(msg_id, str | int):
+            return _error(None, INVALID_REQUEST, "id must be a string or an integer")
         if method == "ping":
             return _result(msg_id, {})
         if method == "initialize":
@@ -230,9 +232,12 @@ def serve(
                 try:
                     reply = server.handle(msg)
                 except Exception as exc:  # noqa: BLE001 - a crash must not kill the session
+                    is_request = isinstance(msg, dict) and "id" in msg
                     msg_id = msg.get("id") if isinstance(msg, dict) else None
-                    reply = _error(
-                        msg_id, -32603, f"internal error: {type(exc).__name__}"
+                    reply = (  # a notification never gets a reply, even on a crash
+                        _error(msg_id, -32603, f"internal error: {type(exc).__name__}")
+                        if is_request
+                        else None
                     )
         if reply is not None:
             out = json.dumps(reply, ensure_ascii=False)

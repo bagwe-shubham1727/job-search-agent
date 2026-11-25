@@ -89,9 +89,9 @@ touching a word of the prompt.
 Several things in this project persist across sessions: the agent's seen-ID state
 (`data/*/state.json`), `FILTER.md` and its frozen versions, the prompt files, the saved raws, and,
 in the Claude Code sessions that built it, memory files that a new session reads at start. When
-behaviour changes from one session to the next (65 postings kept on one day, 53 later; a different
-Claude answer on a re-run), the cause is one of those files, the context, or the model service,
-never training on my labels. **Nothing in this project trained a model.** `claude-sonnet-5-5`'s
+behaviour changes from one session or run to the next (65 postings kept by filter v0.1, 53 by
+v0.3; a different Claude answer on a re-run), the cause is one of those files, the context, or the model service,
+never training on the labels. **Nothing in this project trained a model.** `claude-sonnet-5-5`'s
 weights were the same for every call; the judge runs with `--no-session-persistence` from an empty
 folder, so no call sees another. The filter's "learning" from v0.1 to v0.3 is two edited lines in a
 text file, made by Claude after counting, and it can be undone by restoring the file. The reverse

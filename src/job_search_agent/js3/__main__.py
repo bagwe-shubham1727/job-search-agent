@@ -2,6 +2,7 @@
 
 filter        score the whole corpus with FILTER.md; write decisions and a summary
 audit-draw    draw the reject-audit sample once and write the blind worksheet
+audit-worksheet  re-render the worksheet from the existing draw (no redraw)
 audit-report  score the filter against the hand verdicts (pending until they exist)
 shortlist     label the claims of every kept posting (FILTER.md §2)
 serve         run the MCP tool server on stdin/stdout (see mcp_server.py)
@@ -152,6 +153,18 @@ def _versions(root: Path) -> tuple[list[Scored], dict[str, Scored], Corpus]:
     v01 = score_all(corpus, load_filter(root / V01), root)
     v03 = {s.key: s for s in score_all(corpus, load_filter(root / V03), root)}
     return v01, v03, corpus
+
+
+def cmd_audit_worksheet(root: Path) -> int:
+    """Re-renders the blind worksheet from the committed draw, in the same order."""
+    drawn = json.loads((root / DRAW).read_text(encoding="utf-8"))
+    by_key = load_corpus(root).by_key()
+    _write(
+        root,
+        "docs/js3/audit/WORKSHEET.md",
+        audit.render_worksheet(drawn["worksheet_order"], by_key),
+    )
+    return 0
 
 
 def cmd_audit_draw(root: Path) -> int:
@@ -396,6 +409,7 @@ def main(argv: list[str] | None = None) -> int:
         choices=[
             "filter",
             "audit-draw",
+            "audit-worksheet",
             "audit-report",
             "shortlist",
             "serve",
@@ -410,6 +424,8 @@ def main(argv: list[str] | None = None) -> int:
     filter_path = root / args.filter
     if args.command == "filter":
         return cmd_filter(root, filter_path)
+    if args.command == "audit-worksheet":
+        return cmd_audit_worksheet(root)
     if args.command == "audit-draw":
         return cmd_audit_draw(root)
     if args.command == "audit-report":

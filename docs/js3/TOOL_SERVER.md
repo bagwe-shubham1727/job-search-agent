@@ -31,14 +31,14 @@ Every line in both directions, with a UTC time, exactly as sent.
 
 | File | Client | Server | What happened (2026-11-25 UTC) |
 |---|---|---|---|
-| [`claude-2026-11-25.jsonl`](../../data/js3/mcp/claude-2026-11-25.jsonl) | Claude Code 2.1.330, headless, model `claude-sonnet-5-5`, no built-in tools, only `mcp__jsa__score_posting` allowed | ours | 11 lines. Claude Code first sent `server/discover` (protocol `2026-07-28`); our server refused it ("send initialize first"); Claude Code then sent `initialize` with `2025-11-25`, listed the tools and made two `tools/call`s (Stripe 8128744, Figma 5552549004) |
+| [`claude-2026-11-25.jsonl`](../../data/js3/mcp/claude-2026-11-25.jsonl) | Claude Code 2.1.330, headless, model `claude-sonnet-5-5`, no built-in tools, only `mcp__jsa__score_posting` allowed | ours | 11 lines. Claude Code first sent `server/discover` (protocol `2026-07-28`); our server refused it with error -32600, "send initialize and notifications/initialized first"; Claude Code then sent `initialize` with `2025-11-25`, listed the tools and made two `tools/call`s (Stripe 8128744, Figma 5552549004) |
 | [`claude-2026-11-25.claude.json`](../../data/js3/mcp/claude-2026-11-25.claude.json) | | | Claude's final reply and run metadata (3 turns, $0.037) |
 | [`ours-probe-2026-11-25.jsonl`](../../data/js3/mcp/ours-probe-2026-11-25.jsonl) | our probe | ours | A malformed ID, an extra argument, an unknown posting, `resources/list`, and a call to a tool that does not exist (`apply_to_job`) |
 | [`playwright-mcp-0.0.86-2026-11-25.jsonl`](../../data/js3/mcp/playwright-mcp-0.0.86-2026-11-25.jsonl) | our probe | Microsoft Playwright MCP 0.0.86 | `initialize` and `tools/list` only: 25 tools |
 
 Claude's reply, as received (quoted from the `.claude.json` `result` field), relayed the tool's
 labels faithfully. On the New Grad posting it said "Cannot tell: C4, because the posting gives no
-number of years". That is exactly the tool's abstention, and it is wrong in the way the tool is
+number of years in a sentence about experience". That is exactly the tool's abstention, and it is wrong in the way the tool is
 wrong: the posting caps new-grad experience at 18 months, so Kiran's four years are ruled out
 ([SHORTLIST_NOTES.md](SHORTLIST_NOTES.md) §3). Claude added nothing the tool did not say. That
 is what a tool user should expect: the client repeats the server's blind spots.

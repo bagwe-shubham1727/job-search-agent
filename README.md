@@ -42,7 +42,7 @@ JS3 code.
 
 ```bash
 uv sync
-uv run pytest -q                                      # full suite, offline; 1153 passed on 2026-11-25
+uv run pytest -q                                      # full suite, offline; 1162 passed on 2026-11-25
 uv run ruff check . && uv run mypy src
 
 uv run python -m job_search_agent.js3 filter          # score all 1,235 collected postings with FILTER.md (offline)

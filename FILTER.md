@@ -90,11 +90,13 @@ Each claim gets exactly one label:
   names) states it. The span is quoted with its field. For C1, the title has an R1 phrase. For
   C2, the §6.2 match. For C3, location label `US_BASED`. For C4, the highest stated minimum
   years in a sentence that mentions experience is 4 or less. For C5, the text offers sponsorship
-  ("visa sponsorship", "will sponsor", "sponsorship is available").
+  ("visa sponsorship", "will sponsor", "sponsorship is available") in a sentence that mentions a
+  visa, immigration, H-1B, OPT, a green card or work authorization.
 - **Contradicted**: a span states the opposite. C1: the title has a seniority marker or no role
   word. C3: location label `NON_US`. C4: the highest stated minimum is more than 4 years. C5: the
   text says the employer will not sponsor ("unable to sponsor", "not able to sponsor", "will not
-  sponsor", "does not sponsor", "without sponsorship", "without the need for sponsorship") or has a
+  sponsor", "does not (currently) sponsor", "without sponsorship", "without the need for sponsorship",
+  "sponsorship is not available") or has a
   §6.3 citizenship or clearance phrase.
 - **Insufficient**: no span either way, or spans both ways. C1 with only a generic title word.
   C3 `NOT_ESTABLISHED`. C4 with no number of years. C5 when the text says nothing about
@@ -201,7 +203,8 @@ shown beside the record.
 | — | 2026-11-25 | **Rejected:** threshold 8 | Would make the CONTRACT bar (role phrase + 2 skills + US) insufficient | Flips 26 kept → rejected on v0.1, 9 of them role-phrase titles (e.g. Ramp "Software Engineer, Backend, Growth", Stripe "Full Stack Engineer, Bridge") |
 | — | 2026-11-25 | **Rejected:** threshold 6 | Lets one-skill and specialty postings through | Flips 22 rejected → kept on v0.1: 9 role-phrase titles with one skill or none, and 13 generic titles, 9 of them with a specialty word (Machine Learning Engineer, Support Engineer, Security Engineer, Cloud, …). Measured again on held-out labels as experiment E2 |
 | — | 2026-11-25 | **Rejected:** cut R2 entirely (weight 0) | R2's false friends are better handled by blockers | Flips 17 kept → rejected on v0.1, including "Backend/API Engineer, Money as a Service" (R1 misses it because of the "/", CONTRACT A2) and "Design Engineer", which look like Kiran's kind of work |
-| — | 2026-11-25 | **Rejected:** add "deployed" to the blockers | I cannot tell from the title: Forward Deployed Engineers at Stripe and Figma write production code with customers | Left to the audit: both Forward Deployed postings are in the worksheet's "changed or contested" stratum |
+| — | 2026-11-25 | **Rejected:** add "deployed" to the blockers | Claude could not tell from the title: Forward Deployed Engineers at Stripe and Figma write production code with customers | Left to the audit: both Forward Deployed postings are in the worksheet's "changed or contested" stratum |
+| v0.3 (evidence rules only) | 2026-11-25 | §2 C5: a sponsorship **offer** counts only in a sentence about visas or work authorization; two more refusal forms added. The filter block is unchanged | Found by an independent review agent: on the full corpus the old pattern labelled C5 "supported" on two Ramp postings, "We sponsored Neal Shipley while he was still an amateur golfer" and "We will sponsor you for relocation" (silence-like text taken as support). Tests in `tests/js3/test_claims.py` | C5 is now insufficient on all 1,235 postings; the 53-posting shortlist is unchanged |
 
 All v0.2 and v0.3 measurements were made by Claude by counting flips and reading the matched
 sentences, before any of my audit verdicts existed, so those verdicts are held out for these
