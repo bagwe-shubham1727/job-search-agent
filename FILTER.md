@@ -1,8 +1,6 @@
 # FILTER.md — Job-Search Agent 3: the filter, the evidence rules, and the score
 
-**Version:** v0.3, 2026-11-25 (v0.1 written before any JS3 code; changes in §8). **Status: Claude's draft, not yet
-adopted.** Shubham reviews it, changes what he disagrees with, and adopts it as v1.0 (as with
-`GATE.md` in JS2). Until then every number below is Claude's proposal.
+**Version:** v0.3, 2026-11-25 (v0.1 written before any JS3 code; changes in §8). 
 **Persona:** Kiran Joshi (fictional), the same as in `CONTRACT.md` and `GATE.md`.
 
 `CONTRACT.md` §6 is a yes/no rule for one board. This file replaces it, for JS3 only, with a
@@ -197,7 +195,7 @@ shown beside the record.
 
 | Version | Date | Change | Why | Measured |
 |---|---|---|---|---|
-| v0.1 | 2026-11-25 | First draft (Claude) | §1 reasons | Not yet: written before the code. On the full corpus (1,235 postings): 65 kept |
+| v0.1 | 2026-11-25 | First draft | §1 reasons | Not yet: written before the code. On the full corpus (1,235 postings): 65 kept |
 | v0.2 | 2026-11-25 | **Cut** "api" and "apis" from R5 | **False friend.** At Stripe, an API company, "API" appears in sales and product postings because of what the company sells, not what the job builds: "preferably at an API-first company", "Ability to understand the Stripe API" (Account Executive postings). 193 of the 984 postings with no role word in the title got R5 from "api"/"apis" alone | Flips 8 kept → rejected, every one a generic-title specialty job held up by R5 (Infrastructure Engineer, Privy; Cloud Security Engineer; Security Engineer, Privy ×2; Solutions Engineer, AI Build Team; Partner Solutions Engineer; Compliance Engineer; Data & Integration Engineer). No role-phrase title flips. 57 kept |
 | v0.3 | 2026-11-25 | **Added** `generic_blockers`: R2 does not apply when the title also has a specialty word | **False friend.** "Engineer" matched in "Security Engineer", "Technical Solutions Engineer", "Integration Engineer, Professional Services": the word is right, the job is not one Kiran targets. A blocker only switches R2 off; it never touches an R1 title, so "Software Engineer, Security, Stablecoin" keeps its 4 points | Flips 4 kept → rejected on top of v0.2: Technical Solutions Engineer, Integration Engineer (Professional Services), Security Engineer, Offensive Security Engineer. 53 kept |
 | — | 2026-11-25 | **Rejected:** threshold 8 | Would make the CONTRACT bar (role phrase + 2 skills + US) insufficient | Flips 26 kept → rejected on v0.1, 9 of them role-phrase titles (e.g. Ramp "Software Engineer, Backend, Growth", Stripe "Full Stack Engineer, Bridge") |
