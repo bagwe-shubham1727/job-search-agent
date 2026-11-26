@@ -27,12 +27,14 @@ uv run python scripts/js3_mcp_probe.py <name> [--call TOOL ARGS] -- <server comm
 
 ## 2. The real transcripts
 
+These are MCP protocol transcripts required by Step 2.3 (client ↔ server messages only); no Claude
+conversation or session transcript is included, per the course privacy rule and the JS1 TA note.
 Every line in both directions, with a UTC time, exactly as sent.
 
 | File | Client | Server | What happened (2026-11-25 UTC) |
 |---|---|---|---|
-| [`claude-2026-11-25.jsonl`](../../data/js3/mcp/claude-2026-11-25.jsonl) | Claude Code 2.1.330, headless, model `claude-sonnet-5-5`, no built-in tools, only `mcp__jsa__score_posting` allowed | ours | 11 lines. Claude Code first sent `server/discover` (protocol `2026-07-28`); our server refused it with error -32600, "send initialize and notifications/initialized first"; Claude Code then sent `initialize` with `2025-11-25`, listed the tools and made two `tools/call`s (Stripe 8128744, Figma 5552549004) |
-| [`claude-2026-11-25.claude.json`](../../data/js3/mcp/claude-2026-11-25.claude.json) | | | Claude's final reply and run facts, trimmed to answer, model, turns and cost (3 turns, $0.037) |
+| [`mcp-wire-claude-code-client-2026-11-25.jsonl`](../../data/js3/mcp/mcp-wire-claude-code-client-2026-11-25.jsonl) | Claude Code 2.1.330, headless, model `claude-sonnet-5-5`, no built-in tools, only `mcp__jsa__score_posting` allowed | ours | 11 lines. Claude Code first sent `server/discover` (protocol `2026-07-28`); our server refused it with error -32600, "send initialize and notifications/initialized first"; Claude Code then sent `initialize` with `2025-11-25`, listed the tools and made two `tools/call`s (Stripe 8128744, Figma 5552549004) |
+| [`mcp-wire-claude-code-client-2026-11-25.claude.json`](../../data/js3/mcp/mcp-wire-claude-code-client-2026-11-25.claude.json) | | | Claude's final reply and run facts, trimmed to answer, model, turns and cost (3 turns, $0.037) |
 | [`ours-probe-2026-11-25.jsonl`](../../data/js3/mcp/ours-probe-2026-11-25.jsonl) | our probe | ours | A malformed ID, an extra argument, an unknown posting, `resources/list`, and a call to a tool that does not exist (`apply_to_job`) |
 | [`playwright-mcp-0.0.86-2026-11-25.jsonl`](../../data/js3/mcp/playwright-mcp-0.0.86-2026-11-25.jsonl) | our probe | Microsoft Playwright MCP 0.0.86 | `initialize` and `tools/list` only: 25 tools |
 

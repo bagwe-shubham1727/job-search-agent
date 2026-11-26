@@ -30,7 +30,7 @@ reading them first would make your audit verdicts less blind.
    `[Shubham: confirm or change…]` lines with your decision and reason.
 4. **Check two or three things yourself** and note what you ran: e.g. recompute one shortlisted
    posting's score by hand from FILTER.md §1; open the New Grad posting (8128744) and confirm the
-   18-month sentence; read the Claude transcript `data/js3/mcp/claude-2026-11-25.jsonl`.
+   18-month sentence; read the Claude transcript `data/js3/mcp/mcp-wire-claude-code-client-2026-11-25.jsonl`.
 5. **README:** the sign-off (Checked / How / Not checked / Not claiming / Signed) and the driver's
    seat "why the judgment stays mine" column, in your words. The "What I should do" column is
    Claude's draft; edit it. Facts: `docs/js3/FACTS_FOR_SIGNOFF.md`.
